@@ -4,6 +4,12 @@
 
 The *kgotla* is the Tswana public meeting place where any citizen can bring a matter and be heard. The product takes its name and its promise from it.
 
+<p>
+<img src="docs/screenshots/home.png" width="230" alt="Home screen">
+<img src="docs/screenshots/confirm-with-pin.png" width="230" alt="Confirm with PIN">
+<img src="docs/screenshots/selective-disclosure.png" width="230" alt="Share only what is needed">
+</p>
+
 ## What works today
 
 | Area | What a citizen or officer can do |

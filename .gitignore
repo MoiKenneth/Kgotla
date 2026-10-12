@@ -4,5 +4,3 @@ dist/
 *.log
 .DS_Store
 coverage/
-package-lock.json
-docs/screenshots/
