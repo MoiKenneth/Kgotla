@@ -4,7 +4,8 @@ import formbody from '@fastify/formbody';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type pg from 'pg';
@@ -379,6 +380,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   // Web apps (citizen PWA, officer console, verifier)
   // -------------------------------------------------------------------------
+  // QR library served from the installed package (MIT, qrcode-generator) instead of a vendored copy.
+  const qrPath = createRequire(import.meta.url).resolve('qrcode-generator/qrcode.js');
+  const qrSource = readFileSync(qrPath, 'utf8');
+  app.get('/vendor/qrcode.js', async (_req, reply) => reply.type('application/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=86400').send(qrSource));
+
   const root = webRoot();
   if (root) {
     await app.register(fastifyStatic, {

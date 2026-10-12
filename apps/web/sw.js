@@ -1,7 +1,7 @@
 /* Kgotla service worker: the app shell works offline; API calls always go to the network.
    The app itself keeps the last account summary so a citizen can show their ID with no signal. */
 const CACHE = 'kgotla-shell-v1';
-const SHELL = ['/', '/index.html', '/app.css', '/app.js', '/i18n.js', '/vendor/qrcode.js', '/manifest.webmanifest', '/icons/icon.svg', '/icons/icon-192.png', '/icons/icon-512.png'];
+const SHELL = ['/', '/index.html', '/app.css', '/app.js', '/i18n.js', '/vendor/qrcode.js', '/manifest.webmanifest', '/icons/icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
