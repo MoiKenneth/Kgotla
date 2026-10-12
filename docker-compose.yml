@@ -1,0 +1,33 @@
+# Local demo: `docker compose up --build`, then open http://localhost:8080
+# Demo mode seeds example citizens and officers. Never use these settings for a real pilot.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_PASSWORD: kgotla
+      POSTGRES_DB: kgotla
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DEMO_MODE: "true"
+      DATABASE_URL: postgres://postgres:kgotla@db:5432/kgotla
+      KGOTLA_SECRET: change-me-to-a-long-random-string-before-sharing-this
+      PUBLIC_BASE_URL: http://localhost:8080
+      # Set to enable the Claude assistant; without it the assistant runs in basic mode.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:

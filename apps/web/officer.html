@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kgotla Officer Console</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/console.css">
+</head>
+<body>
+<header class="top"><span class="mini-flag"><i></i><i></i><i></i><i></i><i></i></span><h1>Kgotla Officer Console</h1><span class="who" id="who"></span><button class="btn ghost" id="logout" hidden>Sign out</button></header>
+<main id="main"></main>
+<dialog id="rejectDlg"><form method="dialog" id="rejectForm" style="display:grid;gap:12px">
+  <h2 style="margin:0;font:700 19px var(--display)">Reject application</h2>
+  <p class="hint">The citizen receives this reason by SMS. Any fee is refunded to their wallet automatically.</p>
+  <div class="field"><label for="reason">Reason</label><textarea id="reason" rows="3" required minlength="5" maxlength="300"></textarea></div>
+  <div class="row"><button class="btn crit" value="ok">Reject and refund</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
+</form></dialog>
+<script src="/officer.js"></script>
+</body>
+</html>

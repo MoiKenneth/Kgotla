@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kgotla ID Verifier</title>
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/console.css">
+</head>
+<body>
+<header class="top"><span class="mini-flag"><i></i><i></i><i></i><i></i><i></i></span><h1>Kgotla ID Verifier</h1></header>
+<main style="max-width:560px">
+  <div class="panel" style="display:grid;gap:12px">
+    <h2>Check a citizen's code</h2>
+    <p class="hint">Scan the QR on the citizen's phone, or paste the text it contains. You see only the details they chose to share.</p>
+    <div class="row"><button class="btn sky" id="scan" hidden>Scan with camera</button></div>
+    <video id="video" playsinline muted hidden style="width:100%;border-radius:12px;background:#000"></video>
+    <div class="field"><label for="code">Code</label><textarea id="code" rows="3" placeholder="KGOTLA1:…"></textarea></div>
+    <button class="btn" id="check">Check</button>
+  </div>
+  <div class="panel" id="result" hidden></div>
+</main>
+<script src="/verify.js"></script>
+</body>
+</html>

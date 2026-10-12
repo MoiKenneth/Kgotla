@@ -1,0 +1,17 @@
+{
+  "name": "Kgotla",
+  "short_name": "Kgotla",
+  "description": "One account for every public service: digital ID, Vault, wallet, government services and clinic bookings.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f3f6f9",
+  "theme_color": "#0f1720",
+  "lang": "en",
+  "icons": [
+    { "src": "/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

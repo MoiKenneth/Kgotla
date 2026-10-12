@@ -1,0 +1,17 @@
+{
+  "name": "kgotla",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Kgotla — one account for every public service. Phase 1 (Botswana) citizen platform.",
+  "workspaces": ["apps/api"],
+  "scripts": {
+    "dev": "npm run dev -w apps/api",
+    "build": "npm run build -w apps/api",
+    "start": "npm start -w apps/api",
+    "migrate": "npm run migrate -w apps/api",
+    "seed": "npm run seed -w apps/api",
+    "test": "npm test -w apps/api",
+    "typecheck": "npm run typecheck -w apps/api"
+  },
+  "engines": { "node": ">=20" }
+}
