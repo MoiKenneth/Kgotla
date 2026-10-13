@@ -7,6 +7,8 @@ import { hashIdentifier, hashSecret, randomToken } from './lib/crypto.js';
 import { ensureAccount, post, walletCode } from './modules/ledger.js';
 import { MockRegistry, provisionCitizen } from './modules/identity.js';
 import { seedDemoPartners } from './modules/partners.js';
+import { seedDirectory } from './modules/directory.js';
+import { seedTourismDemo, seedTourismReference } from './modules/tourism.js';
 
 /**
  * Reference data every cell needs, from the active country pack: billers,
@@ -39,6 +41,9 @@ export async function seedReference(pool: pg.Pool, log = console.log): Promise<v
         [l.id, l.kind, l.name, l.agency, l.capacity, l.slots, l.services, l.counters],
       );
     }
+
+    await seedDirectory(c);
+    await seedTourismReference(c);
 
     const a = pack.agencies;
     const issuers = new Map<string, string>();
@@ -122,6 +127,8 @@ export async function seedDemo(pool: pg.Pool, log = console.log): Promise<void> 
 
     // Partners: an approved clinic and bank, and a doctor waiting for review.
     await seedDemoPartners(c, password, log, a?.id);
+    // Tourism: parks with demo fees, the demo hotel's and tour operator's listings, a park gate officer.
+    await seedTourismDemo(c, password, log);
   });
 }
 

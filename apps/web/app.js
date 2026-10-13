@@ -32,6 +32,8 @@
     shield: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z M8.5 12l2.5 2.5 4.5-5', share: 'M18 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M6 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M18 22a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M8.6 13.5l6.8 4 M15.4 6.5l-6.8 4', x: 'M6 6l12 12 M18 6L6 18',
     receipt: 'M6 2h12v20l-3-2-3 2-3-2-3 2z M9 7h6 M9 11h6 M9 15h4', drop: 'M12 3c4 5 6 8 6 11a6 6 0 0 1-12 0c0-3 2-6 6-11z', down: 'M12 4v14 M6 12l6 6 6-6', help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6 M12 17h.01',
     clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2', face: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9 10h.01 M15 10h.01 M8.5 14.5c1 1.3 2.2 2 3.5 2s2.5-.7 3.5-2', users: 'M9 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6 M16 4a3 3 0 0 1 0 6 M18 14c2 .8 3 3 3 6',
+    bed: 'M3 18V7 M3 14h18v4 M21 14v-2a3 3 0 0 0-3-3h-7v5 M7 11.5a1.5 1.5 0 1 0 0-.01', compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M15.5 8.5l-2 5-5 2 2-5z', tree: 'M12 3l6 8h-4l4 6H6l4-6H6z M12 17v4',
+    globe: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z', ext: 'M14 4h6v6 M20 4l-9 9 M18 14v6H4V6h6', map: 'M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z M9 4v14 M15 6v14',
     lang: 'M4 5h9 M8.5 3v2 M6 5c.8 3.5 3 6 6 7.5 M11 5c-.8 3.5-3 6-6 7.5 M13 20l4-9 4 9 M14.5 17h5', out: 'M15 4h4v16h-4 M10 8l-4 4 4 4 M6 12h10',
   };
   /** Used only until /v1/config has loaded once (first ever open, offline). */
@@ -250,6 +252,9 @@
     const ap = m.appointments[0];
     if (ap) h += `<div class="card"><span class="chip good">${ic('clock', 12)} ${t('upcoming')}</span><p style="font-weight:600">${esc(ap.where)}</p><p style="font-size:12.5px;color:var(--muted)">${esc(fday(ap.starts_at))} · ${esc(ftime(ap.starts_at))} · ${esc(ap.purpose)}</p></div>`;
     h += `<h3 class="sec">${t('govSvc')}</h3><div class="tiles">${tile('car', 'sLic', 'licence')}${tile('receipt', 'sTax', 'tax')}${tile('person', 'sBirth', 'birth')}${tile('book', 'sPass', 'booking', 'passport')}${tile('ticket', 'sQueue', 'queue')}${tile('cross', 'sClinic', 'booking', 'clinic')}</div>
+      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('tree', 'tParks', 'travel', 'park')}${tile('bed', 'tStays', 'travel', 'stay')}${tile('compass', 'tSafaris', 'travel', 'safari')}</div>
+      ${(m.trips || []).filter((x) => x.status === 'confirmed').slice(0, 1).map((x) => `<button class="card" data-a="go" data-v="trips" style="text-align:left"><span class="chip good">${ic('map', 12)} ${esc(t('tTrips'))}</span><p style="font-weight:600">${esc(x.listing.name)}</p><p style="font-size:12.5px;color:var(--muted)">${esc(x.when)} · ${esc(x.quantityText)} · <span class="mono">${esc(x.ref)}</span></p></button>`).join('')}
+      <button class="row card" data-a="go" data-v="directory" style="display:flex">${ic('globe', 20, 'lead')}<span class="main"><b>${t('allServices')}</b><small>${esc(t('dirT'))}</small></span>${ic('chev', 16)}</button>
       <h3 class="sec">${t('recent')}</h3><div class="list">${m.transactions.slice(0, 3).map(txRow).join('')}<button class="row" data-a="tab" data-v="pay"><span class="main"><b style="color:var(--sky)">${t('seeAll')}</b></span>${ic('chev', 16)}</button></div>`;
     return { body: h };
   };
@@ -259,6 +264,7 @@
     body: `<h3 class="sec">${t('govSvc')}</h3><div class="tiles">${tile('car', 'sLic', 'licence')}${tile('receipt', 'sTax', 'tax')}${tile('person', 'sBirth', 'birth')}${tile('book', 'sPass', 'booking', 'passport')}${tile('ticket', 'sQueue', 'queue')}</div>
       <h3 class="sec">${t('money')}</h3><div class="tiles">${tile('send', 'send', 'send', '', 'money')}${tile('bolt', 'bills', 'bills', '', 'money')}${tile('phone', 'airtime', 'airtime', '', 'money')}</div>
       <h3 class="sec">${t('health')}</h3><div class="tiles">${tile('cross', 'sClinic', 'booking', 'clinic')}</div>
+      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('tree', 'tParks', 'travel', 'park')}${tile('bed', 'tStays', 'travel', 'stay')}${tile('compass', 'tSafaris', 'travel', 'safari')}${tile('map', 'tTrips', 'trips')}${tile('globe', 'allServices', 'directory')}</div>
       <h3 class="sec">${t('farming')}</h3><div class="tiles">${soon('leaf', 'sAgri', 'Phase 1B')}</div>
       <h3 class="sec">${t('learning')} · ${t('work')}</h3><div class="tiles">${soon('cap', 'sSchool', 'Phase 2')}${soon('brief', 'sJobs', 'Phase 2')}</div>
       <p class="hint">${t('ussdHint')}</p>`,
@@ -313,7 +319,7 @@
       <p class="say">${ic('shield', 16)} ${S.lang === 'tn' ? 'Makalana a ntsha makwalo ka tlhamalalo mo Polokelong ya gago.' : 'Institutions issue documents straight into your Vault. No photocopies, no certification stamps.'}</p>`,
     };
   };
-  const docIcon = (type) => ({ omang: 'id', driver_licence: 'car', tax_clearance: 'receipt', birth_certificate: 'person' })[type] || 'doc';
+  const docIcon = (type) => ({ omang: 'id', driver_licence: 'car', tax_clearance: 'receipt', birth_certificate: 'person', park_permit: 'tree', booking_voucher: 'bed', medical_certificate: 'cross' })[type] || 'doc';
   V.doc = (p) => {
     const d = S.me && S.me.documents.find((x) => x.id === p.id); if (!d) return { title: t('docs'), body: '' };
     const exp = d.valid_to && daysUntil(d.valid_to) <= 60;
@@ -491,6 +497,86 @@
       <button class="btn ghost" data-a="signOut">${ic('out', 18)} ${t('signOut')}</button>
       <p class="hint">${t('ussdHint')}</p>`,
   });
+
+  // ---- travel & tourism
+  const KIND_KEY = { park: 'tParks', stay: 'tStays', safari: 'tSafaris' };
+  V.travel = (p) => {
+    p.k = p.k || 'park';
+    const key = `${p.k}|${p.region || ''}|${p.q || ''}`;
+    if (p.key !== key) { p.key = key; p.res_state = null; }
+    const ok = onceLoad(p, 'res', () => api('GET', `/v1/tourism/listings?kind=${p.k}${p.region ? `&region=${encodeURIComponent(p.region)}` : ''}${p.q ? `&q=${encodeURIComponent(p.q)}` : ''}`));
+    const pills = `<div class="pills">${Object.keys(KIND_KEY).map((k) => `<button class="pill" aria-pressed="${p.k === k}" data-a="pick" data-f="k" data-val="${k}">${esc(t(KIND_KEY[k]))}</button>`).join('')}</div>`;
+    let list = loading();
+    if (ok) {
+      const regions = p.res.regions;
+      list = `<div class="row2"><select id="region" aria-label="${t('allRegions')}" data-a-change="region"><option value="">${t('allRegions')}</option>${regions.map((r) => `<option ${p.region === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>`
+        + (p.res.listings.length ? p.res.listings.map((l) => `<button class="card listing" data-a="go" data-v="listing" data-id="${esc(l.id)}" style="text-align:left">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><b style="font-size:15.5px">${esc(l.name)}</b>${ic(l.kind === 'park' ? 'tree' : l.kind === 'stay' ? 'bed' : 'compass', 20)}</div>
+          <small style="color:var(--muted)">${esc(l.region)} · ${esc(t('by', { p: l.provider }))}</small>
+          <p style="font-size:13px">${esc(l.description)}</p>
+          <div class="pills">${l.highlights.slice(0, 3).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>
+          <b style="font-size:14px">${esc(t('fromPer', { p: money(l.fromPrice), u: t('u_' + l.unit) }))}</b></button>`).join('') : `<p class="hint">—</p>`);
+    } else if (p.res_state === 'error') list = `<p class="err">${esc(p.res_error)}</p>`;
+    return { title: t('travel'), body: `${pills}${list}<button class="btn ghost" data-a="go" data-v="trips">${ic('map', 18)} ${t('tTrips')}</button>` };
+  };
+
+  const addDays = (d, n) => new Date(Date.parse(d + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+  const todayLocal = () => new Date(Date.now() + PK().utcOffsetMinutes * 6e4).toISOString().slice(0, 10);
+  V.listing = (p) => {
+    p.start = p.start || addDays(todayLocal(), 7);
+    if (p.loadedFor !== p.start) { p.loadedFor = p.start; p.l_state = null; }
+    const ok = onceLoad(p, 'l', () => api('GET', `/v1/tourism/listings/${encodeURIComponent(p.id)}?from=${p.start}`));
+    if (!ok) return { title: t('travel'), body: p.l_state === 'error' ? `<p class="err">${esc(p.l_error)}</p>` : loading() };
+    const l = p.l;
+    p.rate = p.rate && l.rates.some((r) => r.key === p.rate) ? p.rate : l.rates[0].key;
+    p.qty = Math.max(1, Math.min(Number(p.qty) || (l.unit === 'room_night' ? 1 : 2), l.capacity, 20));
+    p.days = l.kind === 'safari' ? l.durationDays : Math.max(1, Math.min(Number(p.days) || (l.kind === 'stay' ? 2 : 1), 14));
+    const rate = l.rates.find((r) => r.key === p.rate);
+    const units = l.unit === 'person' ? p.qty : p.qty * p.days;
+    const window = l.availability.slice(0, l.kind === 'safari' ? l.durationDays : p.days);
+    const fits = window.every((d) => d.left >= p.qty);
+    const step = (f, v, label) => `<div class="field"><label>${label}</label><div class="stepper"><button class="iconbtn" data-a="stepv" data-f="${f}" data-val="-1" aria-label="−">−</button><b>${v}</b><button class="iconbtn" data-a="stepv" data-f="${f}" data-val="1" aria-label="+">+</button></div></div>`;
+    return {
+      title: l.name,
+      body: `<div class="card"><small style="color:var(--muted)">${esc(l.region)} · ${esc(t('by', { p: l.provider }))}</small><p>${esc(l.description)}</p>
+          <ul class="scopes">${l.highlights.map((x) => `<li>${ic('check', 14)}<span>${esc(x)}</span></li>`).join('')}</ul>
+          <p style="font-size:12.5px;color:var(--muted)">${esc(t('freeCancel', { h: l.cancelHours }))}</p></div>
+        <div class="field"><label>${t('rateL')}</label><div style="display:grid;gap:8px">${l.rates.map((r) => `<button class="opt" aria-pressed="${p.rate === r.key}" data-a="pick" data-f="rate" data-val="${esc(r.key)}"><span class="main"><b>${esc(r.label)}</b><small>${money(r.price)} · ${esc(t('u_' + l.unit))}</small></span></button>`).join('')}</div></div>
+        <div class="field"><label for="startDate">${t('arrive')}</label><input id="startDate" type="date" min="${todayLocal()}" value="${p.start}" data-a-change="startDate"></div>
+        <div class="avail">${l.availability.map((d, i) => `<span class="${d.left === 0 ? 'full' : i < window.length ? 'in' : ''}" title="${esc(d.label)}"><b>${esc(d.label.split(' ').slice(0, 2).join(' '))}</b>${d.left ? esc(t('spaceLeft', { n: d.left })) : esc(t('fullL'))}</span>`).join('')}</div>
+        <div class="row2">${l.kind === 'safari' ? `<p class="hint">${esc(t('lengthFixed', { d: l.durationDays }))}</p>` : step('days', p.days, t(l.kind === 'stay' ? 'nightsL' : 'daysL'))}${step('qty', p.qty, t(l.unit === 'room_night' ? 'roomsL' : 'peopleL'))}</div>
+        <div class="card"><div style="display:flex;justify-content:space-between"><span>${t('totalL')}</span><b style="font-size:19px">${money(rate.price * units)}</b></div></div>
+        ${fits ? '' : `<p class="err">${esc(t('fullL'))}</p>`}
+        ${btn(t('review'), 'tourReview', fits ? '' : 'disabled')}`,
+    };
+  };
+
+  V.trips = (p) => {
+    const m = S.me; if (!m) return { title: t('tTrips'), body: loading() };
+    const list = m.trips || [];
+    const chip = (x) => x.status === 'confirmed' ? `<span class="chip good">${t('bookedT')}</span>` : x.status === 'completed' ? `<span class="chip">${t('usedT')}</span>` : `<span class="chip crit">${t('cancelledT')}</span>`;
+    return {
+      title: t('tTrips'),
+      body: list.length ? list.map((x) => `<div class="card">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(x.listing.name)}</b>${chip(x)}</div>
+          <p style="font-size:13px">${esc(x.when)} · ${esc(x.quantityText)} · ${esc(x.rate)}</p>
+          <p style="font-size:12.5px;color:var(--muted)">${esc(x.listing.provider)} · <span class="mono">${esc(x.ref)}</span> · ${money(x.total)}${x.refunded ? ` · ${esc(t('refundedT', { a: money(x.refunded) }))}` : ''}</p>
+          ${x.canCancel ? `<div class="btns">${x.documentId ? `<button class="btn sm ghost" data-a="go" data-v="doc" data-id="${x.documentId}">${ic('doc', 16)} ${t('vault')}</button>` : ''}<button class="btn sm ghost" data-a="tripCancel" data-id="${x.id}" data-refund="${x.refundIfCancelled}">${p.confirm === x.id ? t('tapAgain') : x.refundIfCancelled ? t('cancelRefund', { a: money(x.refundIfCancelled) }) : t('cancelNoRefund')}</button></div>` : ''}
+        </div>`).join('') : `<p class="hint">${t('noTrips')}</p><button class="btn" data-a="go" data-v="travel" data-k="park">${t('travel')}</button>`,
+    };
+  };
+
+  V.directory = (p) => {
+    const ok = onceLoad(p, 'dir', () => api('GET', '/v1/directory'));
+    if (!ok) return { title: t('allServices'), body: p.dir_state === 'error' ? `<p class="err">${esc(p.dir_error)}</p>` : loading() };
+    const bySector = {};
+    p.dir.forEach((e) => { (bySector[e.sector] = bySector[e.sector] || []).push(e); });
+    const st = (s) => s === 'connected' ? `<span class="chip good">${t('stConnected')}</span>` : s === 'connecting' ? `<span class="chip warn">${t('stConnecting')}</span>` : `<span class="chip">${t('stLinked')}</span>`;
+    return {
+      title: t('allServices'),
+      body: `<p class="hint">${t('dirB')}</p>` + Object.keys(bySector).map((sec) => `<h3 class="sec">${esc(t('sec_' + sec))}</h3><div class="list">${bySector[sec].map((e) => `<a class="row" href="${esc(e.url)}" target="_blank" rel="noopener noreferrer">${ic('globe', 20, 'lead')}<span class="main"><b>${esc(e.name)}</b><small>${esc(e.description)}</small>${st(e.status)}</span>${ic('ext', 16)}</a>`).join('')}</div>`).join(''),
+    };
+  };
 
   V.connected = () => {
     const m = S.me; if (!m) return { title: t('connected'), body: loading() };
@@ -714,6 +800,16 @@
     confirmAction: () => confirmAction(cur().p.action),
     cancelAction: async () => { const a = cur().p.action; try { await api('POST', `/v1/actions/${a.id}/cancel`); } catch (e) {} back(); },
 
+    // travel
+    stepv: (d) => { const p = cur().p; p[d.f] = (Number(p[d.f]) || 1) + Number(d.val); render(); },
+    tourReview: () => { const p = cur().p; prepare('book_tourism', { listingId: p.id, rateKey: p.rate, startDate: p.start, days: p.days, quantity: p.qty }); },
+    tripCancel: async (d) => {
+      const p = cur().p;
+      if (p.confirm !== d.id) { p.confirm = d.id; render(); return; }
+      try { const r = await api('POST', `/v1/me/trips/${d.id}/cancel`, { acceptNoRefund: Number(d.refund) === 0 }); p.confirm = null; await refresh({ render: false }); toast(r.refunded ? t('refundedT', { a: money(r.refunded) }) : t('cancelledT')); }
+      catch (e) { p.confirm = null; fail(e); }
+    },
+
     // partner requests
     consentApprove: (d) => {
       const c = (S.me.consentRequests || []).find((x) => x.id === d.id); if (!c) return;
@@ -763,6 +859,9 @@
     if (e.target.id === 'composer') { e.preventDefault(); const i = document.getElementById('chatIn'); const v = i.value; i.value = ''; userSay(v); }
   });
   document.addEventListener('change', (e) => {
+    const ch = e.target.dataset && e.target.dataset.aChange;
+    if (ch === 'region') { const p = cur().p; p.region = e.target.value; render(); return; }
+    if (ch === 'startDate' && e.target.value) { const p = cur().p; p.start = e.target.value; render(); return; }
     if (e.target.id === 'selfieFile' && e.target.files && e.target.files[0]) {
       const f = e.target.files[0]; const rd = new FileReader();
       rd.onload = () => {

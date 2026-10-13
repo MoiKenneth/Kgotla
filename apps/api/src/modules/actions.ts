@@ -15,6 +15,7 @@ import { maskPhone, normalisePhone, type Registry } from './identity.js';
 import { ensureAccount, post, walletBalance, walletCode } from './ledger.js';
 import { book, takeTicket } from './places.js';
 import { enqueueEvent, subjectFor } from '../lib/webhooks.js';
+import { bookSchema, executeBooking, prepareBooking } from './tourism.js';
 
 /**
  * Confirmable actions.
@@ -370,6 +371,20 @@ const defs: Record<string, Def<any>> = {
       });
       await notify(db, citizenId, 'Bill paid', `${fmt(amount)} to ${r.trading_name}, reference ${r.reference}.`, { sms: false });
       return { message: `Paid ${fmt(amount)} to ${r.trading_name}.` };
+    },
+  },
+
+  // Stays, safaris and park entry permits. Paid from the wallet; voucher or permit goes to the Vault.
+  book_tourism: {
+    requiresPin: true,
+    schema: bookSchema,
+    async prepare(db, _ctx, citizenId, p) {
+      const prep = await prepareBooking(db, p);
+      await requireFunds(db, citizenId, prep.amount);
+      return prep;
+    },
+    async execute(db, _ctx, citizenId, p, actionId) {
+      return executeBooking(db, citizenId, p, actionId);
     },
   },
 

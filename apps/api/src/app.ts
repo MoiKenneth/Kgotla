@@ -43,6 +43,8 @@ import { handleUssd } from './modules/ussd.js';
 import { createShareLink, issueDocument, listDocuments, openShareLink, revokeShareLink } from './modules/vault.js';
 import { MockRegulator, myConsents, myPaymentRequests, type RegulatorRegistry } from './modules/partners.js';
 import { registerPartnerRoutes } from './partnerRoutes.js';
+import { registerTourismRoutes } from './tourismRoutes.js';
+import { myTrips, parksAgency } from './modules/tourism.js';
 
 export interface AppDeps {
   pool: pg.Pool;
@@ -139,6 +141,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     demoMode: config.demoMode,
     assistant: llm ? 'claude' : 'rules',
     actions: ACTION_TYPES,
+    tourism: { parksAgency: parksAgency() },
   }));
 
   app.post('/v1/enrol/start', strict, async (req) => {
@@ -200,7 +203,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   app.get('/v1/me', async (req) => {
     const id = citizenOf(req);
-    const [p, bal, docs, apps, appts, ticket, notes, txns, discl, consents, bills] = await Promise.all([
+    const [p, bal, docs, apps, appts, ticket, notes, txns, discl, consents, bills, trips] = await Promise.all([
       profile(pool, id),
       walletBalance(pool, id),
       listDocuments(pool, id),
@@ -212,6 +215,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       many<any>(pool, 'SELECT id, audience, claims, created_at, verified_at FROM disclosures WHERE citizen_id = $1 ORDER BY created_at DESC LIMIT 10', [id]),
       myConsents(pool, id),
       myPaymentRequests(pool, id),
+      myTrips(pool, id),
     ]);
     return {
       profile: p,
@@ -228,6 +232,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       consentRequests: consents.requests,
       connected: consents.connected,
       bills,
+      trips,
     };
   });
 
@@ -336,6 +341,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // Partner hub: clinics, doctors, banks, insurers, utilities, schools, employers
   // -------------------------------------------------------------------------
   registerPartnerRoutes(app, pool, deps.regulator ?? new MockRegulator());
+  // Tourism (stays, safaris, parks) and the directory of official portals.
+  registerTourismRoutes(app, pool);
 
   // -------------------------------------------------------------------------
   // Officers (government case workers, counter staff, admins)
@@ -397,7 +404,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
               (SELECT count(*)::int FROM outbox WHERE processed_at IS NULL) AS outbox_pending,
               (SELECT count(*)::int FROM partners WHERE status = 'applied') AS partners_waiting,
               (SELECT count(*)::int FROM partners WHERE status = 'approved') AS partners_live,
-              (SELECT count(*)::int FROM webhook_deliveries WHERE status = 'failed') AS webhooks_failed`,
+              (SELECT count(*)::int FROM webhook_deliveries WHERE status = 'failed') AS webhooks_failed,
+              (SELECT count(*)::int FROM tourism_bookings WHERE status <> 'cancelled') AS tourism_bookings,
+              (SELECT count(*)::int FROM directory_entries) AS directory_entries`,
     );
     const tb = await trialBalance(pool);
     const brokenAt = await verifyAuditChain(pool);

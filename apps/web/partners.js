@@ -7,7 +7,7 @@
   const S = { token: ss.get('kgp.token'), cfg: null, cat: null, me: null, mode: 'apply', type: 'clinic', error: '', applied: null, newKey: null, secret: null, msg: '' };
   const CAP = {
     'identity.basic': 'Name and ID last 4', 'identity.kyc': 'Verified identity (eKYC)', 'documents.read': 'List Vault documents', 'documents.issue': 'Issue documents to the Vault',
-    'payments.request': 'Send bills citizens pay with their PIN', 'notifications.send': 'Send messages and reminders', 'locations.manage': 'Publish bookable clinic slots',
+    'payments.request': 'Send bills citizens pay with their PIN', 'notifications.send': 'Send messages and reminders', 'locations.manage': 'Publish bookable clinic slots', 'listings.manage': 'Publish rooms, safaris and tours',
   };
   const dt = (x) => (x ? new Date(x).toISOString().slice(0, 16).replace('T', ' ') : '');
 
@@ -116,7 +116,17 @@
     const locs = p.capabilities.includes('locations.manage') ? `<div class="panel" style="display:grid;gap:10px"><h2>Bookable locations</h2>
       ${v.locations.length ? `<div class="tbl"><table><thead><tr><th>Id</th><th>Name</th><th>Per slot</th><th>Slots</th></tr></thead><tbody>${v.locations.map((l) => `<tr><td class="mono">${esc(l.id)}</td><td>${esc(l.name)}</td><td>${l.capacity}</td><td class="mono">${esc(l.slot_times.join(' '))}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">None yet. Publish one with <span class="mono">PUT /v1/partner/locations</span>; it appears in the Kgotla app under Book a clinic.</p>'}</div>` : '';
 
-    return `${banner}${S.msg ? `<p class="hint">${esc(S.msg)}</p>` : ''}${live ? activity : ''}<div class="grid2"><div style="display:grid;gap:18px">${keys}${hook}${locs}</div><div style="display:grid;gap:18px">${quick}</div></div>`;
+    const tour = v.tourism ? `<div class="panel" style="display:grid;gap:10px"><h2>Your ${p.type === 'hotel' ? 'rooms' : 'trips'} on Kgotla</h2>
+      ${v.tourism.listings.length ? `<div class="tbl"><table><thead><tr><th>Listing</th><th>Region</th><th>From</th><th>${p.type === 'hotel' ? 'Rooms' : 'Seats'}</th><th>Status</th></tr></thead><tbody>${v.tourism.listings.map((l) => `<tr><td>${esc(l.name)}<br><span class="hint mono">${esc(l.id)}</span></td><td>${esc(l.region)}</td><td>${esc(l.fromText)} / ${esc(l.unitText)}</td><td>${l.capacity}</td><td>${l.active ? '<span class="chip good">LIVE</span>' : '<span class="chip">HIDDEN</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">None yet. Publish with <span class="mono">PUT /v1/partner/listings</span> (example in Quick start).</p>'}
+      <h2 style="margin-top:6px">Bookings, next 60 days</h2>
+      ${v.tourism.bookings.length ? `<div class="tbl"><table><thead><tr><th>Ref</th><th>Guest</th><th>Listing</th><th>From</th><th>Qty</th><th>Paid</th><th>Status</th></tr></thead><tbody>${v.tourism.bookings.map((b) => `<tr><td class="mono">${esc(b.ref)}</td><td>${esc(b.guest.name)}</td><td>${esc(b.listing)}</td><td class="mono">${esc(b.startDate)} · ${b.days}d</td><td>${b.quantity}</td><td>${esc(b.totalText)}</td><td>${b.status === 'confirmed' ? '<span class="chip good">CONFIRMED</span>' : `<span class="chip">${esc(b.status.toUpperCase())}</span>`}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No bookings yet.</p>'}</div>` : '';
+    const tourQuick = v.tourism ? `<p class="hint">Publish or update a ${p.type === 'hotel' ? 'room type' : 'trip'} (prices in ${esc(S.cfg && S.cfg.pack ? S.cfg.pack.currency.code : '')}).</p>
+      <pre>curl -s -X PUT ${esc(base)}/partner/listings -H "authorization: Bearer $TOKEN" -H "content-type: application/json" \\
+  -d '{"key":"${p.type === 'hotel' ? 'garden-rooms' : 'sunset-drive'}","name":"${p.type === 'hotel' ? 'Garden rooms' : 'Sunset game drive'}","region":"Chobe · Kasane",
+       "description":"${p.type === 'hotel' ? 'Quiet garden rooms near the river.' : 'Three hours on an open vehicle with a guide.'}",
+       "rates":[{"key":"${p.type === 'hotel' ? 'standard' : 'adult'}","label":"${p.type === 'hotel' ? 'Standard room' : 'Adult'}","price":"950.00"}],
+       "capacity":${p.type === 'hotel' ? 6 : 10}${p.type === 'hotel' ? '' : ',"durationDays":1'},"cancelHours":48}'</pre>` : '';
+    return `${banner}${S.msg ? `<p class="hint">${esc(S.msg)}</p>` : ''}${live ? activity : ''}<div class="grid2"><div style="display:grid;gap:18px">${tour}${keys}${hook}${locs}</div><div style="display:grid;gap:18px">${quick.replace('<p class="hint">Full reference', tourQuick + '<p class="hint">Full reference')}</div></div>`;
   }
 
   function render() {

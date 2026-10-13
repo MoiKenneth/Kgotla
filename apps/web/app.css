@@ -55,6 +55,7 @@ input,select,textarea{font:inherit;color:inherit}
 .iconbtn:hover{background:var(--sky-soft)}
 .badge{position:absolute;top:4px;right:4px;min-width:16px;height:16px;border-radius:8px;background:var(--crit);color:#ffffff;font:600 10px/16px var(--mono);text-align:center;padding:0 4px}
 .view{flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 16px 20px;display:flex;flex-direction:column;gap:14px;scrollbar-width:thin}
+.view>*{flex-shrink:0}
 .tabs{flex:none;display:grid;grid-template-columns:repeat(5,1fr);border-top:1px solid var(--line);background:var(--surface);padding:6px 4px 14px}
 .tabs button{border:0;background:none;display:grid;justify-items:center;gap:2px;font-size:10.5px;font-weight:600;color:var(--muted);padding:4px 0}
 .tabs button[aria-current="page"]{color:var(--sky)}
@@ -267,3 +268,18 @@ button.row:hover{background:var(--app)}
 .scopes{list-style:none;margin:0;padding:0;display:grid;gap:6px}
 .scopes li{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.35}
 .scopes li .ic{flex:none;margin-top:2px;color:var(--good)}
+
+/* Travel & tourism */
+.row2{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+.row2 select{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;font:inherit;color:inherit;max-width:100%}
+.stepper{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:12px;padding:2px 6px;background:var(--surface);width:max-content}
+.stepper b{min-width:2ch;text-align:center;font-size:16px}
+.stepper .iconbtn{font-size:20px;font-weight:700;width:36px;height:36px}
+.avail{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.avail span{flex:none;border:1px solid var(--line);border-radius:10px;padding:6px 8px;font-size:11px;display:grid;gap:1px;min-width:62px;background:var(--surface);color:var(--muted)}
+.avail span b{font-size:11.5px;color:var(--ink)}
+.avail span.in{border-color:var(--sky);background:var(--sky-soft)}
+.avail span.full{opacity:.55;text-decoration:line-through}
+.card.listing{gap:6px}
+a.row{color:inherit;text-decoration:none}
+.row .main .chip{justify-self:start;margin-top:4px}

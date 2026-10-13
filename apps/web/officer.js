@@ -29,23 +29,24 @@
       return;
     }
     $('who').textContent = `${S.me.name} · ${S.me.agency} · ${S.me.role}`;
-    const tabs = S.me.role === 'admin' ? ['overview', 'partners', 'applications', 'queue'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
+    const parks = S.cfg && S.cfg.tourism ? S.cfg.tourism.parksAgency.code : null;
+    const tabs = S.me.role === 'admin' ? ['overview', 'partners', 'directory', 'permits', 'applications', 'queue'] : S.me.agency === parks ? ['permits'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
     if (!tabs.includes(S.tab)) S.tab = tabs[0];
-    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', partners: 'Partners', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
-    ({ overview, partners, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
+    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', partners: 'Partners', directory: 'Directory', permits: 'Park permits', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
+    ({ overview, partners, directory, permits, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
   }
 
   async function overview() {
     const o = await api('GET', '/v1/officer/overview');
     $('pane').innerHTML = `<div class="stats">
-      ${[['Citizens', o.citizens], ['Open applications', o.open_applications], ['Completed', o.completed_applications], ['Confirmed actions', o.actions_done], ['Prepared by assistant', o.assistant_actions], ['Queue tickets today', o.tickets_today], ['SMS waiting', o.outbox_pending], ['Partner applications waiting', o.partners_waiting], ['Partners live', o.partners_live], ['Failed webhooks', o.webhooks_failed]].map(([l, v]) => `<div class="stat"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}
+      ${[['Citizens', o.citizens], ['Open applications', o.open_applications], ['Completed', o.completed_applications], ['Confirmed actions', o.actions_done], ['Prepared by assistant', o.assistant_actions], ['Queue tickets today', o.tickets_today], ['SMS waiting', o.outbox_pending], ['Partner applications waiting', o.partners_waiting], ['Partners live', o.partners_live], ['Failed webhooks', o.webhooks_failed], ['Tourism bookings', o.tourism_bookings], ['Directory entries', o.directory_entries]].map(([l, v]) => `<div class="stat"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}
       <div class="stat"><b>${o.ledgerBalanced ? '<span class="chip good">BALANCED</span>' : '<span class="chip crit">OUT OF BALANCE</span>'}</b><span>Ledger trial balance</span></div>
       <div class="stat"><b>${o.auditChainIntact ? '<span class="chip good">INTACT</span>' : `<span class="chip crit">BROKEN AT ${esc(o.auditBrokenAt)}</span>`}</b><span>Audit hash chain</span></div></div>`;
   }
 
   const CAP_LABEL = {
     'identity.basic': 'Name and ID last 4', 'identity.kyc': 'Verified identity (eKYC)', 'documents.read': 'List Vault documents', 'documents.issue': 'Issue documents to the Vault',
-    'payments.request': 'Send bills', 'notifications.send': 'Send messages', 'locations.manage': 'Publish bookable locations',
+    'payments.request': 'Send bills', 'notifications.send': 'Send messages', 'locations.manage': 'Publish bookable locations', 'listings.manage': 'Publish rooms, safaris and tours',
   };
   async function partners() {
     const r = await api('GET', `/v1/officer/partners?status=${S.pstatus}`);
@@ -70,6 +71,36 @@
           : p.status === 'suspended' ? `<div class="row"><button class="btn sky" data-reinstate="${p.id}">Reinstate</button></div>` : ''}
         </div>`;
       }).join('')}</div>` : '<p class="hint">Nothing here.</p>'}</div>`;
+  }
+
+  const SECTORS = ['government', 'tax', 'banking', 'health', 'insurance', 'utilities', 'telecoms', 'education', 'tourism', 'transport', 'other'];
+  async function directory() {
+    const rows = await api('GET', '/v1/directory');
+    const st = (s) => s === 'connected' ? '<span class="chip good">CONNECTED</span>' : s === 'connecting' ? '<span class="chip warn">CONNECTING</span>' : '<span class="chip">LINK ONLY</span>';
+    $('pane').innerHTML = `<div class="panel"><h2>Services directory</h2>
+      <p class="hint" style="margin-bottom:12px">Official portals citizens can reach from Kgotla. "Link only" opens the institution's website; move an entry to "Connecting" while a partnership is agreed and "Connected" once it works through the partner hub (link it to the partner code).</p>
+      <div class="tbl"><table><thead><tr><th>Name</th><th>Sector</th><th>Status</th><th>Partner</th><th>Website</th><th></th></tr></thead><tbody>
+      ${rows.map((e) => `<tr><td><b>${esc(e.name)}</b><br><span class="hint">${esc(e.description)}</span></td><td>${esc(e.sector)}</td><td>${st(e.status)}<br><select data-dirstatus="${e.id}" aria-label="Status">${['linked', 'connecting', 'connected'].map((x) => `<option ${x === e.status ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
+        <td class="mono">${esc(e.partner ? e.partner.code : '')}</td><td><a href="${esc(e.url)}" target="_blank" rel="noopener noreferrer" class="mono" style="word-break:break-all">${esc(e.url)}</a></td><td><button class="btn crit" data-dirdel="${e.id}">Remove</button></td></tr>`).join('')}
+      </tbody></table></div></div>
+      <form class="panel" id="dirForm" style="display:grid;gap:10px"><h2>Add an organisation</h2>
+        <div class="row"><input id="dName" placeholder="Name, e.g. Botswana Housing Corporation" required maxlength="80" style="flex:1;min-width:220px">
+        <select id="dSector">${SECTORS.map((x) => `<option>${x}</option>`).join('')}</select>
+        <select id="dStatus"><option>linked</option><option>connecting</option><option>connected</option></select></div>
+        <div class="row"><input id="dUrl" type="url" placeholder="https://… official website" required style="flex:1;min-width:260px" class="mono"><input id="dPartner" placeholder="Partner code (optional)" class="mono"></div>
+        <input id="dDesc" placeholder="What citizens can do there" maxlength="300">
+        <div class="row"><button class="btn sky">Add</button><span class="hint" id="dirMsg"></span></div></form>`;
+    S.dirRows = rows;
+  }
+
+  async function permits() {
+    S.pdate = S.pdate || new Date(Date.now() + ((S.cfg && S.cfg.pack ? S.cfg.pack.utcOffsetMinutes : 120) * 6e4)).toISOString().slice(0, 10);
+    const r = await api('GET', `/v1/officer/park-permits?date=${S.pdate}`);
+    $('pane').innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Park permits · ${esc(r.agency.name)}</h2>
+      <input type="date" id="pdate" value="${esc(r.date)}" aria-label="Date"></div>
+      <p class="hint" style="margin-bottom:10px">Check the visitor's ID card against the name and last 4 characters, then check them in. The permit is also in the visitor's Vault, and they can show it with a share link.</p>
+      ${r.permits.length ? `<div class="tbl"><table><thead><tr><th>Permit</th><th>Park</th><th>Holder</th><th>People</th><th>Rate</th><th>Dates</th><th></th></tr></thead><tbody>${r.permits.map((x) => `<tr><td class="mono">${esc(x.ref)}</td><td>${esc(x.park)}</td><td>${esc(x.holder)}<br><span class="hint mono">${esc(idShort())} ***${esc(x.idLast4)}</span></td><td>${x.people}</td><td>${esc(x.rate)}</td><td>${esc(x.when)}</td>
+        <td>${x.status === 'confirmed' ? `<button class="btn sky" data-checkin="${x.id}">Check in</button>` : '<span class="chip good">CHECKED IN</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No permits for this day.</p>'}</div>`;
   }
 
   async function applications() {
@@ -106,6 +137,8 @@
       if (el.dataset.tab) { S.tab = el.dataset.tab; render(); }
       else if (el.dataset.status) { S.status = el.dataset.status; render(); }
       else if (el.dataset.pstatus) { S.pstatus = el.dataset.pstatus; render(); }
+      else if (el.dataset.checkin) { el.disabled = true; await api('POST', `/v1/officer/park-permits/${el.dataset.checkin}/check-in`); await permits(); }
+      else if (el.dataset.dirdel) { el.disabled = true; await api('DELETE', `/v1/officer/directory/${el.dataset.dirdel}`); await directory(); }
       else if (el.dataset.approve) {
         const caps = [...document.querySelectorAll(`[data-cap="${el.dataset.approve}"]:checked`)].map((c) => c.value);
         el.disabled = true; await api('POST', `/v1/officer/partners/${el.dataset.approve}/approve`, { capabilities: caps }); S.pstatus = 'approved'; render();
@@ -125,8 +158,21 @@
   document.addEventListener('change', (e) => {
     if (e.target.id === 'office') { S.office = e.target.value; render(); }
     if (e.target.id === 'counter') S.counter = Number(e.target.value);
+    if (e.target.id === 'pdate') { S.pdate = e.target.value; permits().catch((x) => alertInline(x.message)); }
+    if (e.target.dataset && e.target.dataset.dirstatus) {
+      const row = (S.dirRows || []).find((x) => x.id === e.target.dataset.dirstatus);
+      if (row) api('PUT', `/v1/officer/directory/${row.id}`, { name: row.name, sector: row.sector, url: row.url, description: row.description, status: e.target.value, partnerCode: row.partner ? row.partner.code : undefined }).then(directory).catch((x) => alertInline(x.message));
+    }
   });
   document.addEventListener('submit', async (e) => {
+    if (e.target.id === 'dirForm') {
+      e.preventDefault();
+      try {
+        await api('POST', '/v1/officer/directory', { name: $('dName').value.trim(), sector: $('dSector').value, status: $('dStatus').value, url: $('dUrl').value.trim(), description: $('dDesc').value.trim(), partnerCode: $('dPartner').value.trim() || undefined });
+        await directory();
+      } catch (x) { $('dirMsg').textContent = x.message; }
+      return;
+    }
     if (e.target.id === 'loginForm') {
       e.preventDefault();
       try {

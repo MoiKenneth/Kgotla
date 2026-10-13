@@ -27,6 +27,8 @@ export const WEBHOOK_EVENTS = [
   'payment_request.declined',
   'appointment.booked',
   'appointment.cancelled',
+  'tourism_booking.confirmed',
+  'tourism_booking.cancelled',
   'partner.approved',
   'partner.suspended',
   'ping',

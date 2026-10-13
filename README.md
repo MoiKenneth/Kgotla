@@ -25,6 +25,8 @@ The *kgotla* is the Tswana public meeting place where any citizen can bring a ma
 | **USSD `*321#`** | ID, balance, send money, BPC, licence status, tax clearance and queue tickets on a feature phone with no data. Unregistered phones can still take a queue ticket. |
 | **AI assistant** | Claude, server-side, reads the citizen's own records and *prepares* actions. It has no tool that can execute; the citizen confirms every payment with their PIN. Falls back to a basic mode without an API key. |
 | **Partner hub** | Clinics, doctors, pharmacies, banks, mobile-money operators, insurers, utilities, networks, schools and employers apply at `/partners.html`; their licence is checked with the regulator and a Kgotla admin approves them. They get OAuth API keys and signed webhooks, ask citizens for consent (approved in the app with a PIN, withdrawable any time), then verify identity (eKYC), issue sick notes or statements to the Vault, send bills citizens pay with their PIN, and publish bookable clinic slots. See [docs/PARTNERS.md](docs/PARTNERS.md). |
+| **Travel & tourism** | Book national park entry (citizen, SADC and international rates), hotels and lodges, and safaris and tours. Paid from the wallet with PIN; the park permit or voucher goes to the Vault; full refund before the cut-off. Capacity is enforced night by night. Park gate staff check permits in. Hotels and tour operators onboard as partners and publish rooms and trips by API. See [docs/TOURISM.md](docs/TOURISM.md). |
+| **All services directory** | Every official portal in one place, by sector (BURS e-Tax, FNB Botswana, Life Gaborone Private Hospital, BPC, WUC and more). Linked portals open the official website; connected ones work inside Kgotla. Admins manage the list and track each institution from linked to connected. See [docs/CONNECTIONS.md](docs/CONNECTIONS.md). |
 | **Officer console** | Case workers advance or reject applications for their agency (rejections refund fees automatically). Counter staff run the queue. Admins see ledger and audit-chain integrity. |
 | **Works on African realities** | Installable PWA, offline shell with the last account summary, 2G-friendly payloads, data-saver, Setswana, USSD, SMS for every important event. |
 
@@ -96,7 +98,8 @@ Botswana is below. Every cell's sign-in screen and officer console list its own 
 | New sign-up | Omang `341926728` or `778215043` | in the mock registry, not yet enrolled |
 | DRTS case worker | `drts.case` / `kgotla-demo` | also `cnr.case`, `burs.case` |
 | DRTS counter | `drts.counter` / `kgotla-demo` | |
-| Partner portal | `clinic@demo.kgotla`, `bank@demo.kgotla`, `doctor@demo.kgotla` / `kgotla-demo` | clinic and bank approved, doctor waiting for review; API keys `demo-clinic` / `demo-clinic-secret`, `demo-bank` / `demo-bank-secret` |
+| Park gate | `parks.gate` / `kgotla-demo` | checks in park permits |
+| Partner portal | `clinic@demo.kgotla`, `bank@demo.kgotla`, `doctor@demo.kgotla` / `kgotla-demo` | clinic, bank, lodge (`hotel@demo.kgotla`) and safari operator (`safari@demo.kgotla`) approved, doctor waiting for review; API keys `demo-clinic` / `demo-clinic-secret`, `demo-bank` / `demo-bank-secret` |
 | Admin | `admin` / `kgotla-demo` | |
 
 Demo mode shows SMS codes on screen and gives every wallet example money (P 2,500.00 in Botswana, scaled to each country). It refuses to start with `NODE_ENV=production`.
@@ -104,7 +107,7 @@ Demo mode shows SMS codes on screen and gives every wallet example money (P 2,50
 ## Tests
 
 ```bash
-npm test     # 85 integration tests against a real PostgreSQL (set TEST_DATABASE_URL)
+npm test     # 99 integration tests against a real PostgreSQL (set TEST_DATABASE_URL)
 ```
 
 They cover, among other things: overdraw protection under racing confirmations, append-only and balanced ledger enforced by the database, PIN lockout, end-to-end licence renewal with officer approval and agency isolation, fee refunds, tamper detection on ID codes, share-link revocation, queue notifications, the USSD menu, and the assistant being unable to execute anything it prepares. Each Phase 2 country is tested end to end: its ID and phone formats, a local bill payment, a licence renewal approved by its own officer, and a cell refusing another country's database. The partner hub is tested from application to approval, consent with PIN, eKYC, document issuing, bills paid once, clinic bookings, signed webhooks with retries, withdrawal and suspension.
@@ -140,3 +143,5 @@ The national registry, liveness vendor, SMS gateway, mobile-money collection and
 - [Deploying to Azure](docs/DEPLOY.md): one-time setup and the deploy workflow
 - [Countries](docs/COUNTRIES.md): country packs and what to confirm per country
 - [Partners](docs/PARTNERS.md): onboarding clinics, doctors, banks and others, business and technical
+- [Connections](docs/CONNECTIONS.md): how existing portals (BURS e-Tax, FNB, Life Gaborone…) move from linked to connected
+- [Tourism](docs/TOURISM.md): parks, stays and safaris

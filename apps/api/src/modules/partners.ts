@@ -14,6 +14,7 @@ import { slotInstant, timeLabel } from '../lib/time.js';
 import { checkWebhookUrl, enqueueEvent, subjectFor, webhookSecret, WEBHOOK_EVENTS } from '../lib/webhooks.js';
 import { nationalId, normalisePhone } from './identity.js';
 import { issueDocument } from './vault.js';
+import { partnerListings, partnerTourismBookings } from './tourism.js';
 
 /**
  * Partner hub: how clinics, doctors, banks, mobile-money operators, insurers,
@@ -188,8 +189,12 @@ export async function portalView(db: Queryable, partnerId: string) {
     many<any>(db, 'SELECT id, name, capacity, slot_times FROM locations WHERE partner_id = $1 ORDER BY name', [partnerId]),
     config.demoMode ? many<any>(db, 'SELECT event, signature_ok, received_at FROM demo_webhook_inbox WHERE partner_code = $1 ORDER BY id DESC LIMIT 5', [p.code]) : Promise.resolve([]),
   ]);
+  const tourism = (p.capabilities as string[]).includes('listings.manage')
+    ? { listings: await partnerListings(db, partnerId), bookings: await partnerTourismBookings(db, partnerId, undefined, 60) }
+    : null;
   return {
     partner: publicPartner(p),
+    tourism,
     credentials: creds.map((c) => ({ id: c.id, clientId: c.client_id, label: c.label, createdAt: c.created_at, lastUsedAt: c.last_used_at, revoked: !!c.revoked_at })),
     webhook: { url: p.webhook_url, deliveries, demoInbox: inbox },
     consents,
