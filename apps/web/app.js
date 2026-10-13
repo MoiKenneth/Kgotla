@@ -211,6 +211,22 @@
     return { raw: `<div class="ob">${bar}<div class="big-ok"><div class="ring">${ic('shield', 32)}</div><h4>${t('ob5T')}</h4><p>${t('ob5B')}</p></div><div class="grow"></div><button class="btn sky" data-a="tab" data-v="home">${t('openApp')}</button></div>` };
   };
 
+  // ---- partner requests: consent and bills from clinics, banks and others
+  const requestsHtml = (m) => {
+    const cs = m.consentRequests || []; const bs = m.bills || [];
+    if (!cs.length && !bs.length) return '';
+    return `<h3 class="sec">${t('reqT')}</h3>` + cs.map((c) => `<div class="card req">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span class="chip">${ic('shield', 12)} ${esc(c.partner.typeLabel)}</span><small style="color:var(--muted)">${esc(t('until', { d: fd(c.expiresAt) }))}</small></div>
+        <p style="font-weight:700">${esc(t('reqAsk', { p: c.partner.name }))}</p>
+        <ul class="scopes">${c.scopes.map((x) => `<li>${ic('check', 14)}<span>${esc(x.description)}</span></li>`).join('')}</ul>
+        <p style="font-size:12.5px;color:var(--muted)">${esc(t('purpose'))}: ${esc(c.purpose)} · ${esc(t('licensedBy', { r: c.partner.regulator.split(' · ')[0] }))}</p>
+        <div class="btns"><button class="btn sm" data-a="consentApprove" data-id="${c.id}">${ic('shield', 16)} ${t('approvePin')}</button><button class="btn sm ghost" data-a="consentDecline" data-id="${c.id}">${t('decline')}</button></div></div>`).join('')
+      + bs.map((b) => `<div class="card req">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><span class="chip warn">${ic('receipt', 12)} ${esc(t('billFrom', { p: b.partner }))}</span><b style="font-size:18px">${money(b.amount)}</b></div>
+        <p style="font-weight:600">${esc(b.description)}</p><p style="font-size:12.5px;color:var(--muted)">${esc(t('ref'))} <span class="mono">${esc(b.reference)}</span> · ${esc(t('until', { d: fd(b.expiresAt) }))}</p>
+        <div class="btns"><button class="btn sm" data-a="billPay" data-id="${b.id}">${t('payBill')} ${money(b.amount)}</button><button class="btn sm ghost" data-a="billDecline" data-id="${b.id}">${t('decline')}</button></div></div>`).join('');
+  };
+
   // ---- home
   V.home = () => {
     const m = S.me; if (!m) return { body: loading() };
@@ -220,6 +236,7 @@
     let h = `<div class="greet"><b>${esc(t('hello', { n: m.profile.firstName }))}</b><small>${esc(fday(new Date()))} · ${esc(m.profile.district)}</small></div>
       <div class="wallet"><div><div class="lbl">${t('balance')}</div><div class="amt">${money(m.balance)}</div></div>
       <div class="qa"><button data-a="go" data-v="send">${ic('send', 18)}${t('send')}</button><button data-a="go" data-v="bills">${ic('bolt', 18)}${t('bills')}</button><button data-a="go" data-v="airtime">${ic('phone', 18)}${t('airtime')}</button><button data-a="go" data-v="topup">${ic('down', 18)}${t('topup')}</button></div></div>`;
+    h += requestsHtml(m);
     if (lic && dleft !== null && dleft <= 60 && !renewing) {
       h += `<div class="nudge"><span class="chip warn">${ic('clock', 12)} ${fd(lic.valid_to)}</span><div class="t">${esc(t('nudgeT', { d: Math.max(0, dleft) }))}</div><p style="font-size:13px;color:var(--muted)">${esc(t('nudgeB'))}</p><div class="btns"><button class="btn sm" data-a="go" data-v="licence">${t('renewNow')}</button><button class="btn sm ghost" data-a="assistSay" data-k="sug1">${ic('mic', 16)} ${t('askAssist')}</button></div></div>`;
     }
@@ -466,6 +483,7 @@
     title: t('settings'),
     body: `<div class="list">
       ${PK().languages.length > 1 ? `<div class="row">${ic('lang', 20, 'lead')}<span class="main"><b>${t('lang')}</b></span><span class="seg">${langPills('')}</span></div>` : ''}
+      <button class="row" data-a="go" data-v="connected">${ic('shield', 20, 'lead')}<span class="main"><b>${t('connected')}</b><small>${S.me && S.me.connected ? S.me.connected.length : 0}</small></span>${ic('chev', 16)}</button>
       <div class="row">${ic('id', 20, 'lead')}<span class="main"><b>${esc(PK().name)}</b><small>${esc(PK().currency.code)} · ${esc(PK().languages.map((l) => l.name).join(', '))}${PK().plannedLanguages.length ? ` · ${S.lang === 'tn' ? 'e tla' : 'coming'}: ${esc(PK().plannedLanguages.join(', '))}` : ''}</small></span></div>
       <button class="toggle" role="switch" aria-checked="${S.dataSaver}" data-a="toggle" data-k="dataSaver"><span class="main"><b style="font-weight:600;font-size:14px">${t('dataSaver')}</b><small>${t('dataSaverB')}</small></span><span class="sw"></span></button>
       ${'speechSynthesis' in window ? `<button class="toggle" role="switch" aria-checked="${S.readAloud}" data-a="toggle" data-k="readAloud"><span class="main"><b style="font-weight:600;font-size:14px">${t('readAloud')}</b></span><span class="sw"></span></button>` : ''}
@@ -473,6 +491,19 @@
       <button class="btn ghost" data-a="signOut">${ic('out', 18)} ${t('signOut')}</button>
       <p class="hint">${t('ussdHint')}</p>`,
   });
+
+  V.connected = () => {
+    const m = S.me; if (!m) return { title: t('connected'), body: loading() };
+    const list = m.connected || [];
+    return {
+      title: t('connected'),
+      body: `<p class="hint">${t('connectedB')}</p>${list.length ? list.map((c) => `<div class="card">
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${esc(c.partner.name)}</b><span class="chip good">${ic('check', 11)} ${esc(c.partner.typeLabel)}</span></div>
+          <ul class="scopes">${c.scopes.map((x) => `<li>${ic('check', 14)}<span>${esc(x.description)}</span></li>`).join('')}</ul>
+          <p style="font-size:12.5px;color:var(--muted)">${esc(c.purpose)} · ${esc(t('until', { d: fd(c.expiresAt) }))}</p>
+          <button class="btn sm ghost" data-a="consentRevoke" data-id="${c.id}">${t('withdraw')}</button></div>`).join('') : `<p class="hint">${t('noConnected')}</p>`}`,
+    };
+  };
 
   // ---- assistant
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -682,6 +713,19 @@
     leaveQ: async () => { try { await api('POST', '/v1/me/queue/leave'); await refresh(); } catch (e) { fail(e); } },
     confirmAction: () => confirmAction(cur().p.action),
     cancelAction: async () => { const a = cur().p.action; try { await api('POST', `/v1/actions/${a.id}/cancel`); } catch (e) {} back(); },
+
+    // partner requests
+    consentApprove: (d) => {
+      const c = (S.me.consentRequests || []).find((x) => x.id === d.id); if (!c) return;
+      askPin([[t('org'), c.partner.name], [t('canDo'), c.scopes.map((x) => x.description).join(' · ')], [t('purpose'), c.purpose]], async (pin) => {
+        await api('POST', `/v1/me/consents/${c.id}/approve`, { pin });
+        UI.sheet = null; await refresh({ render: false }); toast(t('approvedT'));
+      });
+    },
+    consentDecline: async (d) => { try { await api('POST', `/v1/me/consents/${d.id}/decline`); await refresh({ render: false }); toast(t('declinedT')); } catch (e) { fail(e); } },
+    consentRevoke: async (d) => { try { await api('POST', `/v1/me/consents/${d.id}/revoke`); await refresh({ render: false }); toast(t('withdrawn')); } catch (e) { fail(e); } },
+    billPay: (d) => prepare('pay_request', { requestId: d.id }),
+    billDecline: async (d) => { try { await api('POST', `/v1/me/payment-requests/${d.id}/decline`); await refresh({ render: false }); toast(t('declinedT')); } catch (e) { fail(e); } },
 
     // PIN sheet
     pinKey: async (d) => {

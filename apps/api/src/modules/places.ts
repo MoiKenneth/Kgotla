@@ -4,6 +4,7 @@ import { audit } from '../lib/audit.js';
 import { badRequest, conflict, notFound } from '../lib/errors.js';
 import { enqueue, notify } from '../lib/notify.js';
 import { dayLabel, localDate, nextWorkdays, slotInstant, timeLabel } from '../lib/time.js';
+import { enqueueEvent, subjectFor } from '../lib/webhooks.js';
 
 // ---------------------------------------------------------------------------
 // Bookings (clinics, passport offices, eye-test rooms)
@@ -47,7 +48,7 @@ export async function availability(db: Queryable, locationId: string, days = 5) 
 
 /** Book a slot, respecting capacity. Runs in the caller's transaction. */
 export async function book(db: Queryable, citizenId: string, locationId: string, startsAt: string, purpose: string, applicationId?: string) {
-  const loc = await one<any>(db, 'SELECT id, name, capacity, slot_times FROM locations WHERE id = $1 FOR UPDATE', [locationId]);
+  const loc = await one<any>(db, 'SELECT id, name, capacity, slot_times, partner_id FROM locations WHERE id = $1 FOR UPDATE', [locationId]);
   if (!loc) throw notFound('Unknown location');
   const at = new Date(startsAt);
   if (isNaN(at.getTime()) || at.getTime() < Date.now()) throw badRequest('invalid_slot', 'Choose a time in the future');
@@ -62,6 +63,13 @@ export async function book(db: Queryable, citizenId: string, locationId: string,
     );
     await notify(db, citizenId, 'Appointment booked', `${loc.name}, ${dayLabel(at)} at ${timeLabel(at)}.`, { sms: true });
     await audit(db, `citizen:${citizenId}`, 'appointment.booked', `appointment:${r.id}`, { locationId, startsAt: at.toISOString() });
+    if (loc.partner_id) {
+      // A private clinic or practice: tell its system about the booking.
+      const c = await one<any>(db, 'SELECT first_name, last_name FROM citizens WHERE id = $1', [citizenId]);
+      await enqueueEvent(db, loc.partner_id, 'appointment.booked', {
+        appointmentId: r.id, locationId, startsAt: at.toISOString(), purpose, patient: { name: `${c.first_name} ${c.last_name}`, subject: subjectFor(loc.partner_id, citizenId) },
+      });
+    }
     return { id: r.id as string, where: loc.name as string, startsAt: at };
   } catch (e: any) {
     if (e?.code === '23505') throw conflict('double_booking', 'You already have an appointment at that time');
@@ -81,9 +89,17 @@ export async function myAppointments(db: Queryable, citizenId: string) {
 }
 
 export async function cancelAppointment(db: Queryable, citizenId: string, id: string) {
-  const r = await db.query(`UPDATE appointments SET status = 'cancelled' WHERE id = $1 AND citizen_id = $2 AND status = 'booked'`, [id, citizenId]);
-  if (!r.rowCount) throw notFound('Appointment not found');
+  const r = await one<any>(
+    db,
+    `UPDATE appointments a SET status = 'cancelled' FROM locations l
+      WHERE a.id = $1 AND a.citizen_id = $2 AND a.status = 'booked' AND l.id = a.location_id RETURNING a.id, a.starts_at, l.partner_id, a.location_id`,
+    [id, citizenId],
+  );
+  if (!r) throw notFound('Appointment not found');
   await audit(db, `citizen:${citizenId}`, 'appointment.cancelled', `appointment:${id}`);
+  if (r.partner_id) {
+    await enqueueEvent(db, r.partner_id, 'appointment.cancelled', { appointmentId: id, locationId: r.location_id, startsAt: r.starts_at, subject: subjectFor(r.partner_id, citizenId) });
+  }
 }
 
 // ---------------------------------------------------------------------------

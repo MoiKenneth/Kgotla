@@ -8,16 +8,20 @@ import { forbidden, locked, unauthorized } from './errors.js';
 
 export type Principal =
   | { type: 'citizen'; id: string; sessionId: string }
-  | { type: 'officer'; id: string; sessionId: string; agency: string; role: string };
+  | { type: 'officer'; id: string; sessionId: string; agency: string; role: string }
+  | { type: 'partner'; id: string; sessionId: string; via: 'portal' | 'api'; status: string };
+
+export type SubjectType = 'citizen' | 'officer' | 'partner_portal' | 'partner_api';
 
 export async function createSession(
   db: Queryable,
-  subjectType: 'citizen' | 'officer',
+  subjectType: SubjectType,
   subjectId: string,
   deviceLabel?: string,
+  ttlHours = config.sessionTtlHours,
 ): Promise<{ token: string; expiresAt: Date }> {
   const token = randomToken(32);
-  const expiresAt = new Date(Date.now() + config.sessionTtlHours * 3600_000);
+  const expiresAt = new Date(Date.now() + ttlHours * 3600_000);
   await db.query(
     'INSERT INTO sessions (token_hash, subject_type, subject_id, device_label, expires_at) VALUES ($1,$2,$3,$4,$5)',
     [hashToken(token), subjectType, subjectId, deviceLabel ?? null, expiresAt],
@@ -30,13 +34,21 @@ export async function resolvePrincipal(pool: pg.Pool, req: FastifyRequest): Prom
   if (!h || !h.startsWith('Bearer ')) return null;
   const s = await one<any>(
     pool,
-    `SELECT s.id, s.subject_type, s.subject_id, o.agency, o.role
-       FROM sessions s LEFT JOIN officers o ON s.subject_type = 'officer' AND o.id = s.subject_id
+    `SELECT s.id, s.subject_type, s.subject_id, o.agency, o.role, p.status AS partner_status
+       FROM sessions s
+       LEFT JOIN officers o ON s.subject_type = 'officer' AND o.id = s.subject_id
+       LEFT JOIN partners p ON s.subject_type IN ('partner_portal','partner_api') AND p.id = s.subject_id
       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()`,
     [hashToken(h.slice(7).trim())],
   );
   if (!s) return null;
   if (s.subject_type === 'citizen') return { type: 'citizen', id: s.subject_id, sessionId: s.id };
+  if (s.subject_type === 'partner_api') {
+    // API tokens stop working the moment a partner is suspended.
+    if (s.partner_status !== 'approved') return null;
+    return { type: 'partner', id: s.subject_id, sessionId: s.id, via: 'api', status: s.partner_status };
+  }
+  if (s.subject_type === 'partner_portal') return { type: 'partner', id: s.subject_id, sessionId: s.id, via: 'portal', status: s.partner_status };
   return { type: 'officer', id: s.subject_id, sessionId: s.id, agency: s.agency, role: s.role };
 }
 
@@ -52,6 +64,14 @@ export function officerOf(req: FastifyRequest, roles?: string[]) {
   if (!p) throw unauthorized();
   if (p.type !== 'officer') throw forbidden('This is for government officers');
   if (roles && !roles.includes(p.role) && p.role !== 'admin') throw forbidden('Your role cannot do this');
+  return p;
+}
+
+/** The partner behind a request: 'api' for OAuth access tokens, 'portal' for the partner portal. */
+export function partnerOf(req: FastifyRequest, via: 'api' | 'portal') {
+  const p = (req as any).principal as Principal | null;
+  if (!p) throw unauthorized(via === 'api' ? 'Send a valid access token from /v1/oauth/token' : 'Sign in to the partner portal');
+  if (p.type !== 'partner' || p.via !== via) throw forbidden(via === 'api' ? 'This needs a partner API access token' : 'This is for the partner portal');
   return p;
 }
 

@@ -4,6 +4,7 @@ import { useCountry } from './countries/index.js';
 import { buildApp } from './app.js';
 import { createPool } from './db.js';
 import { MemorySms, processOutbox } from './lib/notify.js';
+import { processWebhooks } from './lib/webhooks.js';
 import { assertCell, migrate } from './migrate.js';
 import { seedDemo, seedReference } from './seed.js';
 
@@ -21,9 +22,12 @@ const app = await buildApp({ pool, llm, logger: true });
 // Development SMS gateway logs messages. Swap for a real gateway adapter in a pilot.
 const sms = new MemorySms((m) => app.log.info(m));
 const timer = setInterval(() => processOutbox(pool, sms).catch((e) => app.log.error(e)), config.outboxIntervalMs);
+// Partner webhooks: signed, retried with back-off.
+const hooks = setInterval(() => processWebhooks(pool).catch((e) => app.log.error(e)), Math.max(config.outboxIntervalMs, 3000));
 
 const shutdown = async () => {
   clearInterval(timer);
+  clearInterval(hooks);
   await app.close();
   await pool.end();
   process.exit(0);

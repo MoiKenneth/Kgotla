@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kgotla Partner Portal</title>
+<meta name="description" content="Connect a clinic, practice, bank, insurer, utility, school or employer to Kgotla.">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/console.css">
+<style>
+  .grid2{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:18px;align-items:start}
+  @media (max-width:860px){.grid2{grid-template-columns:1fr}}
+  .form{display:grid;gap:12px}
+  .form .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media (max-width:560px){.form .two{grid-template-columns:1fr}}
+  .steps{margin:0;padding-left:20px;display:grid;gap:8px;font-size:14px}
+  .steps b{font-weight:600}
+  pre{background:var(--app);border:1px solid var(--line);border-radius:10px;padding:12px;overflow-x:auto;font:12.5px/1.55 var(--mono);margin:0;white-space:pre}
+  .secret{display:grid;gap:6px;border:1px solid var(--good);background:var(--good-soft);border-radius:10px;padding:12px}
+  .secret code{font:600 13px var(--mono);word-break:break-all}
+  .banner{border-radius:12px;padding:14px 16px;display:grid;gap:4px;border:1px solid var(--line)}
+  .banner.wait{background:var(--ochre-soft);border-color:var(--ochre)}
+  .banner.live{background:var(--good-soft);border-color:var(--good)}
+  .banner.stop{background:var(--crit-soft);border-color:var(--crit)}
+  .banner b{font:700 17px var(--display)}
+  .caps{display:flex;flex-wrap:wrap;gap:6px}
+  .typeinfo{font-size:13px;color:var(--muted);display:grid;gap:4px}
+</style>
+</head>
+<body>
+<header class="top"><span class="mini-flag" data-flag></span><h1 id="title">Kgotla Partner Portal</h1><span class="who" id="who"></span><button class="btn ghost" id="logout" hidden>Sign out</button></header>
+<main id="main"><div class="panel">Loading…</div></main>
+<script src="/flags.js"></script>
+<script src="/partners.js"></script>
+</body>
+</html>

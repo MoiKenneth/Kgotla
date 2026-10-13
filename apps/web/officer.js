@@ -4,7 +4,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const $ = (id) => document.getElementById(id);
   const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch (e) {} } };
-  const S = { token: ss.get('kgo.token'), me: null, tab: null, status: 'open', office: null, counter: 1, cfg: null, error: '' };
+  const S = { token: ss.get('kgo.token'), me: null, tab: null, status: 'open', pstatus: 'applied', office: null, counter: 1, cfg: null, error: '' };
   const idShort = () => (S.cfg && S.cfg.pack ? S.cfg.pack.nationalId.short : 'ID');
   const fdt = (x) => { const off = S.cfg && S.cfg.pack ? S.cfg.pack.utcOffsetMinutes : 120; const d = new Date(new Date(x).getTime() + off * 60e3); return d.toISOString().slice(0, 16).replace('T', ' '); };
 
@@ -29,18 +29,47 @@
       return;
     }
     $('who').textContent = `${S.me.name} · ${S.me.agency} · ${S.me.role}`;
-    const tabs = S.me.role === 'admin' ? ['overview', 'applications', 'queue'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
+    const tabs = S.me.role === 'admin' ? ['overview', 'partners', 'applications', 'queue'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
     if (!tabs.includes(S.tab)) S.tab = tabs[0];
-    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
-    ({ overview, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
+    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', partners: 'Partners', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
+    ({ overview, partners, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
   }
 
   async function overview() {
     const o = await api('GET', '/v1/officer/overview');
     $('pane').innerHTML = `<div class="stats">
-      ${[['Citizens', o.citizens], ['Open applications', o.open_applications], ['Completed', o.completed_applications], ['Confirmed actions', o.actions_done], ['Prepared by assistant', o.assistant_actions], ['Queue tickets today', o.tickets_today], ['SMS waiting', o.outbox_pending]].map(([l, v]) => `<div class="stat"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}
+      ${[['Citizens', o.citizens], ['Open applications', o.open_applications], ['Completed', o.completed_applications], ['Confirmed actions', o.actions_done], ['Prepared by assistant', o.assistant_actions], ['Queue tickets today', o.tickets_today], ['SMS waiting', o.outbox_pending], ['Partner applications waiting', o.partners_waiting], ['Partners live', o.partners_live], ['Failed webhooks', o.webhooks_failed]].map(([l, v]) => `<div class="stat"><b>${esc(v)}</b><span>${l}</span></div>`).join('')}
       <div class="stat"><b>${o.ledgerBalanced ? '<span class="chip good">BALANCED</span>' : '<span class="chip crit">OUT OF BALANCE</span>'}</b><span>Ledger trial balance</span></div>
       <div class="stat"><b>${o.auditChainIntact ? '<span class="chip good">INTACT</span>' : `<span class="chip crit">BROKEN AT ${esc(o.auditBrokenAt)}</span>`}</b><span>Audit hash chain</span></div></div>`;
+  }
+
+  const CAP_LABEL = {
+    'identity.basic': 'Name and ID last 4', 'identity.kyc': 'Verified identity (eKYC)', 'documents.read': 'List Vault documents', 'documents.issue': 'Issue documents to the Vault',
+    'payments.request': 'Send bills', 'notifications.send': 'Send messages', 'locations.manage': 'Publish bookable locations',
+  };
+  async function partners() {
+    const r = await api('GET', `/v1/officer/partners?status=${S.pstatus}`);
+    const chk = (c) => c.status === 'verified' ? '<span class="chip good">LICENCE VERIFIED</span>' : c.status === 'not_found' ? '<span class="chip crit">LICENCE NOT FOUND</span>' : '<span class="chip warn">NOT CHECKED</span>';
+    $('pane').innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Partners</h2>
+      <div class="tabs">${['applied', 'approved', 'suspended', 'rejected'].map((s) => `<button data-pstatus="${s}" aria-pressed="${S.pstatus === s}">${{ applied: 'Waiting for review', approved: 'Live', suspended: 'Suspended', rejected: 'Rejected' }[s]}</button>`).join('')}</div></div>
+      <p class="hint" style="margin-bottom:12px">Clinics, doctors, banks and other organisations apply at <span class="mono">/partners.html</span>. Check the licence result, confirm the company registration, then approve with only the capabilities they need.</p>
+      ${r.partners.length ? `<div style="display:grid;gap:12px">${r.partners.map((p) => {
+        const allowed = r.types[p.type].capabilities;
+        return `<div class="panel" style="padding:14px;display:grid;gap:8px">
+          <div class="row" style="justify-content:space-between"><div><b style="font-size:16px">${esc(p.tradingName)}</b> <span class="chip">${esc(p.typeLabel)}</span></div>${chk(p.licenceCheck || {})}</div>
+          <div class="tbl"><table><tbody>
+            <tr><th>Legal name</th><td>${esc(p.legalName)}</td><th>Registration</th><td class="mono">${esc(p.registrationNo)}</td></tr>
+            <tr><th>Regulator</th><td>${esc(p.regulator)}</td><th>Licence</th><td class="mono">${esc(p.licenceNo || '')}</td></tr>
+            <tr><th>Register says</th><td colspan="3">${esc((p.licenceCheck && p.licenceCheck.detail) || '')} <span class="hint">${esc((p.licenceCheck && p.licenceCheck.register) || '')}</span></td></tr>
+            <tr><th>Contact</th><td>${esc(p.contactName)}<br><span class="mono">${esc(p.contactEmail)} · ${esc(p.contactPhone)}</span></td><th>Applied</th><td class="mono">${esc(fdt(p.createdAt))}</td></tr>
+            ${p.reviewNote ? `<tr><th>Review note</th><td colspan="3">${esc(p.reviewNote)}</td></tr>` : ''}
+          </tbody></table></div>
+          ${p.status === 'applied' ? `<fieldset style="border:1px solid var(--line);border-radius:10px;padding:10px 12px"><legend class="hint">Capabilities to grant</legend><div class="row">${allowed.map((c) => `<label class="row" style="gap:6px;font-size:13.5px"><input type="checkbox" data-cap="${p.id}" value="${c}" checked> ${esc(CAP_LABEL[c] || c)}</label>`).join('')}</div></fieldset>
+            <div class="row"><button class="btn sky" data-approve="${p.id}">Approve</button><button class="btn crit" data-pnote="${p.id}" data-pact="reject">Reject</button></div>`
+          : p.status === 'approved' ? `<div class="row"><span class="hint">Can: ${p.capabilities.map((c) => esc(CAP_LABEL[c] || c)).join(' · ')}</span><button class="btn crit" data-pnote="${p.id}" data-pact="suspend">Suspend</button></div>`
+          : p.status === 'suspended' ? `<div class="row"><button class="btn sky" data-reinstate="${p.id}">Reinstate</button></div>` : ''}
+        </div>`;
+      }).join('')}</div>` : '<p class="hint">Nothing here.</p>'}</div>`;
   }
 
   async function applications() {
@@ -76,6 +105,13 @@
     try {
       if (el.dataset.tab) { S.tab = el.dataset.tab; render(); }
       else if (el.dataset.status) { S.status = el.dataset.status; render(); }
+      else if (el.dataset.pstatus) { S.pstatus = el.dataset.pstatus; render(); }
+      else if (el.dataset.approve) {
+        const caps = [...document.querySelectorAll(`[data-cap="${el.dataset.approve}"]:checked`)].map((c) => c.value);
+        el.disabled = true; await api('POST', `/v1/officer/partners/${el.dataset.approve}/approve`, { capabilities: caps }); S.pstatus = 'approved'; render();
+      }
+      else if (el.dataset.reinstate) { el.disabled = true; await api('POST', `/v1/officer/partners/${el.dataset.reinstate}/reinstate`, {}); S.pstatus = 'approved'; render(); }
+      else if (el.dataset.pnote) { noting = { id: el.dataset.pnote, act: el.dataset.pact }; $('noteTitle').textContent = noting.act === 'reject' ? 'Reject partner application' : 'Suspend partner'; $('note').value = ''; $('noteDlg').showModal(); }
       else if (el.dataset.adv) { el.disabled = true; await api('POST', `/v1/officer/applications/${el.dataset.adv}/advance`, {}); render(); }
       else if (el.dataset.rej) { rejecting = el.dataset.rej; $('reason').value = ''; $('rejectDlg').showModal(); }
       else if (el.id === 'callNext') {
@@ -103,6 +139,12 @@
     if ($('rejectDlg').returnValue !== 'ok' || !rejecting) return;
     try { await api('POST', `/v1/officer/applications/${rejecting}/reject`, { reason: $('reason').value.trim() }); } catch (x) { alertInline(x.message); }
     rejecting = null; render();
+  });
+  let noting = null;
+  $('noteDlg').addEventListener('close', async () => {
+    if ($('noteDlg').returnValue !== 'ok' || !noting) return;
+    try { await api('POST', `/v1/officer/partners/${noting.id}/${noting.act}`, { note: $('note').value.trim() }); S.pstatus = noting.act === 'reject' ? 'rejected' : 'suspended'; } catch (x) { alertInline(x.message); }
+    noting = null; render();
   });
   function alertInline(msg) { const p = $('pane') || $('main'); const n = document.createElement('p'); n.className = 'err'; n.textContent = msg; p.prepend(n); setTimeout(() => n.remove(), 5000); }
 

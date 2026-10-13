@@ -14,6 +14,7 @@ import { getTemplate, openApplication } from './gov.js';
 import { maskPhone, normalisePhone, type Registry } from './identity.js';
 import { ensureAccount, post, walletBalance, walletCode } from './ledger.js';
 import { book, takeTicket } from './places.js';
+import { enqueueEvent, subjectFor } from '../lib/webhooks.js';
 
 /**
  * Confirmable actions.
@@ -315,6 +316,60 @@ const defs: Record<string, Def<any>> = {
     async execute(db, _ctx, citizenId, p) {
       const a = await book(db, citizenId, p.locationId, p.startsAt, p.purpose);
       return { message: `Booked: ${a.where}, ${dayLabel(a.startsAt)} at ${timeLabel(a.startsAt)}.`, appointmentId: a.id };
+    },
+  },
+
+  // A bill from a partner (clinic, bank, school...). Only the citizen can pay it, with their PIN.
+  pay_request: {
+    requiresPin: true,
+    schema: z.object({ requestId: z.string().uuid() }),
+    async prepare(db, _ctx, citizenId, p) {
+      const r = await one<any>(
+        db,
+        `SELECT r.*, pt.trading_name, pt.status AS partner_status FROM payment_requests r JOIN partners pt ON pt.id = r.partner_id
+          WHERE r.id = $1 AND r.citizen_id = $2`,
+        [p.requestId, citizenId],
+      );
+      if (!r) throw notFound('Bill not found');
+      if (r.status !== 'pending') throw conflict('not_pending', r.status === 'paid' ? 'This bill is already paid' : `This bill was ${r.status}`);
+      if (new Date(r.expires_at) < new Date()) throw conflict('expired', 'This bill has expired. Ask for a new one.');
+      if (r.partner_status !== 'approved') throw conflict('partner_inactive', `${r.trading_name} cannot receive payments through Kgotla right now`);
+      const amount = Number(r.amount);
+      await requireFunds(db, citizenId, amount);
+      return {
+        params: { requestId: r.id },
+        label: `Pay ${fmt(amount)} to ${r.trading_name}`,
+        amount,
+        readback: [['To', r.trading_name], ['For', r.description], ['Reference', r.reference], ['Amount', fmt(amount)], ['Fee', fmt(0)]],
+      };
+    },
+    async execute(db, _ctx, citizenId, p, actionId) {
+      const r = await one<any>(db, `SELECT r.*, pt.trading_name FROM payment_requests r JOIN partners pt ON pt.id = r.partner_id WHERE r.id = $1 AND r.citizen_id = $2 FOR UPDATE OF r`, [p.requestId, citizenId]);
+      if (!r || r.status !== 'pending') throw conflict('not_pending', 'This bill is no longer waiting for payment');
+      const amount = Number(r.amount);
+      const acct = `payable:partner:${r.partner_id}`;
+      await ensureAccount(db, acct, 'liability', `Payable · ${r.trading_name}`);
+      await post(db, {
+        kind: 'partner_payment',
+        description: `${r.trading_name} · ${r.reference}`,
+        idempotencyKey: `action:${actionId}`,
+        meta: { actionId, paymentRequestId: r.id, partnerId: r.partner_id },
+        lines: [
+          { account: walletCode(citizenId), amount },
+          { account: acct, amount: -amount },
+        ],
+      });
+      const paid = await one<any>(db, `UPDATE payment_requests SET status = 'paid', paid_at = now(), action_id = $2 WHERE id = $1 RETURNING paid_at`, [r.id, actionId]);
+      await enqueueEvent(db, r.partner_id, 'payment_request.paid', {
+        paymentRequestId: r.id,
+        reference: r.reference,
+        amount,
+        currency: country().currency.code,
+        subject: subjectFor(r.partner_id, citizenId),
+        paidAt: paid.paid_at,
+      });
+      await notify(db, citizenId, 'Bill paid', `${fmt(amount)} to ${r.trading_name}, reference ${r.reference}.`, { sms: false });
+      return { message: `Paid ${fmt(amount)} to ${r.trading_name}.` };
     },
   },
 

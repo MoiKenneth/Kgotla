@@ -79,3 +79,7 @@ Amounts are pula as a string or number with at most 2 decimals (`"125.50"`); res
 ## Country cells
 
 Every cell serves the same API. `nationalId` takes the ID in the cell's own format (spaces, dashes and slashes are accepted); the Phase 1 field name `omang` is still accepted everywhere as an alias. `GET /v1/config` returns `pack`, the cell's public country settings: ID and phone rules, currency, agencies, billers, top-up sources, quick amounts, languages, USSD code and, in demo mode, the demo accounts. Disclosure claims use `id_last4` (`omang_last4` is accepted as an alias), and verified codes report the issuing `country`.
+
+## Partner hub
+
+Clinics, doctors, banks and other organisations: `POST /v1/partners/apply`, the partner portal (`/v1/partner-portal/*`), OAuth 2.0 client credentials at `POST /v1/oauth/token`, and the consent-gated partner API (`/v1/partner/*`). Citizens answer at `GET /v1/me/consents`, `POST /v1/me/consents/:id/approve` (PIN), `…/decline`, `…/revoke`, and pay bills with the `pay_request` action. Admins review at `/v1/officer/partners`. Full reference, webhooks and signature checking: [PARTNERS.md](PARTNERS.md).

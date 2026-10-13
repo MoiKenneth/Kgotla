@@ -18,6 +18,12 @@
   <div class="field"><label for="reason">Reason</label><textarea id="reason" rows="3" required minlength="5" maxlength="300"></textarea></div>
   <div class="row"><button class="btn crit" value="ok">Reject and refund</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
 </form></dialog>
+<dialog id="noteDlg"><form method="dialog" style="display:grid;gap:12px">
+  <h2 style="margin:0;font:700 19px var(--display)" id="noteTitle">Reason</h2>
+  <p class="hint">The partner sees this in their portal. Suspending stops their API access immediately.</p>
+  <div class="field"><label for="note">Reason</label><textarea id="note" rows="3" required minlength="3" maxlength="300"></textarea></div>
+  <div class="row"><button class="btn crit" value="ok">Confirm</button><button class="btn ghost" value="cancel" formnovalidate>Cancel</button></div>
+</form></dialog>
 <script src="/flags.js"></script>
 <script src="/officer.js"></script>
 </body>

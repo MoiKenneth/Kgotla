@@ -6,6 +6,7 @@ import { createPool, one, tx } from './db.js';
 import { hashIdentifier, hashSecret, randomToken } from './lib/crypto.js';
 import { ensureAccount, post, walletCode } from './modules/ledger.js';
 import { MockRegistry, provisionCitizen } from './modules/identity.js';
+import { seedDemoPartners } from './modules/partners.js';
 
 /**
  * Reference data every cell needs, from the active country pack: billers,
@@ -118,6 +119,9 @@ export async function seedDemo(pool: pg.Pool, log = console.log): Promise<void> 
       await c.query('INSERT INTO officers (username, name, agency, role, password_hash) VALUES ($1,$2,$3,$4,$5)', [o.username, o.name, o.agency, o.role, await hashSecret(password)]);
       log(`demo officer ${o.username} (${o.agency} ${o.role})${process.env.DEMO_OFFICER_PASSWORD ? '' : ` · password ${password}`}`);
     }
+
+    // Partners: an approved clinic and bank, and a doctor waiting for review.
+    await seedDemoPartners(c, password, log, a?.id);
   });
 }
 

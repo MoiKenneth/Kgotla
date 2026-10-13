@@ -43,6 +43,10 @@ Each cell has its own database, bound to its country on first start (`cell_meta`
 
 On Azure each cell is a Container App with its own managed identity, Key Vault and PostgreSQL server, behind a shared registry and Container Apps environment (`infra/`, [DEPLOY.md](DEPLOY.md)). The app signs in to PostgreSQL with a Microsoft Entra token from its managed identity, so no database password exists.
 
+## Partner hub
+
+Organisations outside government connect through `src/modules/partners.ts` and `src/partnerRoutes.ts`: application with an automatic licence check (a `RegulatorRegistry` adapter), admin approval with capabilities limited by partner type, OAuth 2.0 client credentials (hashed secrets, one-hour tokens stored as sessions so suspension cuts them off), and citizen consent approved with a PIN. Partners address people only by a pairwise `subject` (HMAC of partner and citizen), never a Kgotla id or national ID number. Bills from partners are `payment_requests` paid through the `pay_request` confirmable action into a `payable:partner:<id>` ledger account. Events go to `webhook_deliveries` in the same transaction as the change, and a worker delivers them signed (HMAC-SHA256, Stripe-style `t=…,v1=…`), with back-off retries. See [PARTNERS.md](PARTNERS.md).
+
 ## Confirmable actions
 
 The single path for anything that spends money or acts for a citizen.

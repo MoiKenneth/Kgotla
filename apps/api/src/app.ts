@@ -41,6 +41,8 @@ import { statement, trialBalance, walletBalance } from './modules/ledger.js';
 import { availability, callNext, cancelAppointment, leaveQueue, locations, myAppointments, myTicket, queueBoard, queueOffices } from './modules/places.js';
 import { handleUssd } from './modules/ussd.js';
 import { createShareLink, issueDocument, listDocuments, openShareLink, revokeShareLink } from './modules/vault.js';
+import { MockRegulator, myConsents, myPaymentRequests, type RegulatorRegistry } from './modules/partners.js';
+import { registerPartnerRoutes } from './partnerRoutes.js';
 
 export interface AppDeps {
   pool: pg.Pool;
@@ -48,6 +50,7 @@ export interface AppDeps {
   liveness?: Liveness;
   vending?: Vending;
   llm?: LlmClient | null;
+  regulator?: RegulatorRegistry;
   logger?: boolean;
 }
 
@@ -197,7 +200,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // -------------------------------------------------------------------------
   app.get('/v1/me', async (req) => {
     const id = citizenOf(req);
-    const [p, bal, docs, apps, appts, ticket, notes, txns, discl] = await Promise.all([
+    const [p, bal, docs, apps, appts, ticket, notes, txns, discl, consents, bills] = await Promise.all([
       profile(pool, id),
       walletBalance(pool, id),
       listDocuments(pool, id),
@@ -207,6 +210,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       many<any>(pool, 'SELECT id, title, body, read_at, created_at FROM notifications WHERE citizen_id = $1 ORDER BY created_at DESC LIMIT 30', [id]),
       statement(pool, id, 30),
       many<any>(pool, 'SELECT id, audience, claims, created_at, verified_at FROM disclosures WHERE citizen_id = $1 ORDER BY created_at DESC LIMIT 10', [id]),
+      myConsents(pool, id),
+      myPaymentRequests(pool, id),
     ]);
     return {
       profile: p,
@@ -220,6 +225,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       unread: notes.filter((n) => !n.read_at).length,
       transactions: txns,
       disclosures: discl,
+      consentRequests: consents.requests,
+      connected: consents.connected,
+      bills,
     };
   });
 
@@ -325,6 +333,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   // -------------------------------------------------------------------------
+  // Partner hub: clinics, doctors, banks, insurers, utilities, schools, employers
+  // -------------------------------------------------------------------------
+  registerPartnerRoutes(app, pool, deps.regulator ?? new MockRegulator());
+
+  // -------------------------------------------------------------------------
   // Officers (government case workers, counter staff, admins)
   // -------------------------------------------------------------------------
   app.post('/v1/officer/login', strict, async (req) => {
@@ -381,7 +394,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
               (SELECT count(*)::int FROM pending_actions WHERE status = 'done') AS actions_done,
               (SELECT count(*)::int FROM pending_actions WHERE status = 'done' AND source = 'assistant') AS assistant_actions,
               (SELECT count(*)::int FROM queue_tickets WHERE day = CURRENT_DATE) AS tickets_today,
-              (SELECT count(*)::int FROM outbox WHERE processed_at IS NULL) AS outbox_pending`,
+              (SELECT count(*)::int FROM outbox WHERE processed_at IS NULL) AS outbox_pending,
+              (SELECT count(*)::int FROM partners WHERE status = 'applied') AS partners_waiting,
+              (SELECT count(*)::int FROM partners WHERE status = 'approved') AS partners_live,
+              (SELECT count(*)::int FROM webhook_deliveries WHERE status = 'failed') AS webhooks_failed`,
     );
     const tb = await trialBalance(pool);
     const brokenAt = await verifyAuditChain(pool);

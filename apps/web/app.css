@@ -261,3 +261,9 @@ button.row:hover{background:var(--app)}
 .center{text-align:center}
 .mono{font-family:var(--mono)}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* Partner requests (consent, bills) */
+.card.req{border-color:color-mix(in srgb,var(--sky) 35%,var(--line))}
+.scopes{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.scopes li{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;line-height:1.35}
+.scopes li .ic{flex:none;margin-top:2px;color:var(--good)}
