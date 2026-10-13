@@ -7,7 +7,7 @@
  */
 import type { CountryPack } from './types.js';
 
-export const PARTNER_TYPES = ['clinic', 'doctor', 'pharmacy', 'bank', 'mobile_money', 'insurer', 'utility', 'telco', 'school', 'employer', 'hotel', 'tour_operator'] as const;
+export const PARTNER_TYPES = ['clinic', 'doctor', 'pharmacy', 'bank', 'mobile_money', 'insurer', 'utility', 'telco', 'school', 'employer', 'hotel', 'tour_operator', 'game_reserve', 'transport'] as const;
 export type PartnerType = (typeof PARTNER_TYPES)[number];
 
 /** What a citizen can be asked to share or allow. Shown to the citizen word for word. */
@@ -88,6 +88,16 @@ export const PARTNER_TYPE_INFO: Record<PartnerType, { label: string; capabilitie
     capabilities: ['identity.basic', 'documents.issue', 'payments.request', 'notifications.send', LISTINGS_MANAGE],
     documentTypes: ['booking_confirmation', 'invoice'],
   },
+  game_reserve: {
+    label: 'Private game reserve or conservancy',
+    capabilities: ['identity.basic', 'documents.issue', 'payments.request', 'notifications.send', LISTINGS_MANAGE],
+    documentTypes: ['booking_confirmation', 'invoice', 'entry_permit'],
+  },
+  transport: {
+    label: 'Driver, guide or transfer company',
+    capabilities: ['identity.basic', 'documents.issue', 'payments.request', 'notifications.send', LISTINGS_MANAGE],
+    documentTypes: ['booking_confirmation', 'invoice'],
+  },
 };
 
 interface Regulator { code: string; name: string }
@@ -117,6 +127,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       employer: R('CIPA', 'Companies and Intellectual Property Authority'),
       hotel: R('DoT', 'Department of Tourism (tourism enterprise licence) / Botswana Tourism Organisation grading'),
       tour_operator: R('DoT', 'Department of Tourism (tourism enterprise licence)'),
+      game_reserve: R('DoT', 'Department of Tourism (tourism enterprise licence) / DWNP (wildlife)'),
+      transport: R('DRTS', 'Department of Road Transport & Safety (public service permit) / Department of Tourism (guide licence)'),
     },
     demo: [
       { code: 'thusong-clinic', type: 'clinic', tradingName: 'Thusong Family Clinic', legalName: 'Thusong Family Clinic (Pty) Ltd', registrationNo: 'BW00001234567', licenceNo: 'HF-2041', contactName: 'Sister Kelebogile Moeng', email: 'clinic@demo.kgotla', phone: '+26773100200', status: 'approved' },
@@ -124,6 +136,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       { code: 'dr-kgari', type: 'doctor', tradingName: 'Dr Boitumelo Kgari', legalName: 'Kgari Medical Practice', registrationNo: 'BW00005550123', licenceNo: 'BHPC-MP-08812', contactName: 'Dr Boitumelo Kgari', email: 'doctor@demo.kgotla', phone: '+26773100400', status: 'applied' },
       { code: 'letsatsi-lodge', type: 'hotel', tradingName: 'Letsatsi River Lodge', legalName: 'Letsatsi River Lodge (Pty) Ltd', registrationNo: 'BW00003334445', licenceNo: 'TEL-0911', contactName: 'Kefilwe Ntshole', email: 'hotel@demo.kgotla', phone: '+26773100500', status: 'approved' },
       { code: 'tsodilo-trails', type: 'tour_operator', tradingName: 'Tsodilo Trails Safaris', legalName: 'Tsodilo Trails Safaris (Pty) Ltd', registrationNo: 'BW00004445556', licenceNo: 'TOL-0478', contactName: 'Mpho Ditshwanelo', email: 'safari@demo.kgotla', phone: '+26773100600', status: 'approved' },
+      { code: 'tshwene-reserve', type: 'game_reserve', tradingName: 'Tshwene Wildlife Reserve', legalName: 'Tshwene Wildlife Reserve (Pty) Ltd', registrationNo: 'BW00006667778', licenceNo: 'TEL-1305', contactName: 'Gaone Mosweu', email: 'reserve@demo.kgotla', phone: '+26773100700', status: 'approved' },
+      { code: 'motse-drive', type: 'transport', tradingName: 'Motse Drive & Transfers', legalName: 'Motse Drive and Transfers (Pty) Ltd', registrationNo: 'BW00007778889', licenceNo: 'PSP-2207', contactName: 'Kagiso Rapula', email: 'driver@demo.kgotla', phone: '+26773100800', status: 'approved' },
     ],
   },
   ZA: {
@@ -141,6 +155,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       employer: R('CIPC', 'Companies and Intellectual Property Commission'),
       hotel: R('TGCSA', 'Tourism Grading Council of South Africa / municipal business licence'),
       tour_operator: R('NDT', 'National Department of Tourism (tourist guide registration)'),
+      game_reserve: R('DFFE', 'Provincial conservation authority (game farm registration) / TGCSA'),
+      transport: R('NPTR', 'National Public Transport Regulator (tourist transport operating licence)'),
     },
     demo: [
       { code: 'ubuntu-clinic', type: 'clinic', tradingName: 'Ubuntu Family Clinic', legalName: 'Ubuntu Family Clinic (Pty) Ltd', registrationNo: '2019/123456/07', licenceNo: 'GP-HF-7781', contactName: 'Sister Zanele Mthembu', email: 'clinic@demo.kgotla', phone: '+27821000200', status: 'approved' },
@@ -148,6 +164,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       { code: 'dr-khumalo', type: 'doctor', tradingName: 'Dr Lerato Khumalo', legalName: 'Khumalo Medical Practice', registrationNo: '2021/555012/07', licenceNo: 'MP0661234', contactName: 'Dr Lerato Khumalo', email: 'doctor@demo.kgotla', phone: '+27821000400', status: 'applied' },
       { code: 'nyala-bend', type: 'hotel', tradingName: 'Nyala Bend Lodge', legalName: 'Nyala Bend Lodge (Pty) Ltd', registrationNo: '2016/221144/07', licenceNo: 'TGCSA-30412', contactName: 'Thuli Ndlovu', email: 'hotel@demo.kgotla', phone: '+27821000500', status: 'approved' },
       { code: 'marula-path', type: 'tour_operator', tradingName: 'Marula Path Safaris', legalName: 'Marula Path Safaris (Pty) Ltd', registrationNo: '2017/331155/07', licenceNo: 'TG-GP-11823', contactName: 'Andile Zungu', email: 'safari@demo.kgotla', phone: '+27821000600', status: 'approved' },
+      { code: 'inyathi-ridge', type: 'game_reserve', tradingName: 'Inyathi Ridge Private Reserve', legalName: 'Inyathi Ridge (Pty) Ltd', registrationNo: '2014/441166/07', licenceNo: 'GF-MP-0921', contactName: 'Lindiwe Mabaso', email: 'reserve@demo.kgotla', phone: '+27821000700', status: 'approved' },
+      { code: 'umoya-transfers', type: 'transport', tradingName: 'Umoya Transfers', legalName: 'Umoya Transfers (Pty) Ltd', registrationNo: '2018/552277/07', licenceNo: 'NPTR-TT-4410', contactName: 'Bongani Shabalala', email: 'driver@demo.kgotla', phone: '+27821000800', status: 'approved' },
     ],
   },
   NA: {
@@ -165,6 +183,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       employer: R('BIPA', 'Business and Intellectual Property Authority'),
       hotel: R('NTB', 'Namibia Tourism Board (registration of accommodation)'),
       tour_operator: R('NTB', 'Namibia Tourism Board (registration of tour operators)'),
+      game_reserve: R('NTB', 'Namibia Tourism Board / Ministry of Environment, Forestry and Tourism (conservancy)'),
+      transport: R('NTB', 'Namibia Tourism Board (tour and transport operators) / Roads Authority'),
     },
     demo: [
       { code: 'omusati-clinic', type: 'clinic', tradingName: 'Omusati Family Clinic', legalName: 'Omusati Family Clinic (Pty) Ltd', registrationNo: '2018/0456', licenceNo: 'MHSS-HF-332', contactName: 'Sister Ndinelao Shilongo', email: 'clinic@demo.kgotla', phone: '+264811000200', status: 'approved' },
@@ -172,6 +192,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       { code: 'dr-haufiku', type: 'doctor', tradingName: 'Dr Martha Haufiku', legalName: 'Haufiku Medical Practice', registrationNo: '2022/1101', licenceNo: 'MP-4410', contactName: 'Dr Martha Haufiku', email: 'doctor@demo.kgotla', phone: '+264811000400', status: 'applied' },
       { code: 'okondeka-lodge', type: 'hotel', tradingName: 'Okondeka Plains Lodge', legalName: 'Okondeka Plains Lodge (Pty) Ltd', registrationNo: '2015/0911', licenceNo: 'NTB-AC-2231', contactName: 'Ester Amukoto', email: 'hotel@demo.kgotla', phone: '+264811000500', status: 'approved' },
       { code: 'red-dune-trails', type: 'tour_operator', tradingName: 'Red Dune Trails', legalName: 'Red Dune Trails CC', registrationNo: 'CC/2014/1120', licenceNo: 'NTB-TO-0877', contactName: 'Johannes Kamati', email: 'safari@demo.kgotla', phone: '+264811000600', status: 'approved' },
+      { code: 'omuramba-reserve', type: 'game_reserve', tradingName: 'Omuramba Private Reserve', legalName: 'Omuramba Private Reserve (Pty) Ltd', registrationNo: '2013/0455', licenceNo: 'NTB-AC-1987', contactName: 'Saara Nakale', email: 'reserve@demo.kgotla', phone: '+264811000700', status: 'approved' },
+      { code: 'ombepo-transfers', type: 'transport', tradingName: 'Ombepo Transfers', legalName: 'Ombepo Transfers CC', registrationNo: 'CC/2016/0877', licenceNo: 'NTB-TO-1342', contactName: 'Thomas Hangula', email: 'driver@demo.kgotla', phone: '+264811000800', status: 'approved' },
     ],
   },
   ZM: {
@@ -189,6 +211,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       employer: R('PACRA', 'Patents and Companies Registration Agency'),
       hotel: R('MoT', 'Ministry of Tourism (tourism enterprise licence)'),
       tour_operator: R('MoT', 'Ministry of Tourism (tourism enterprise licence)'),
+      game_reserve: R('DNPW', 'Department of National Parks and Wildlife (game ranch licence) / Ministry of Tourism'),
+      transport: R('RTSA', 'Road Transport and Safety Agency (public service vehicle) / Ministry of Tourism'),
     },
     demo: [
       { code: 'kabulonga-clinic', type: 'clinic', tradingName: 'Kabulonga Family Clinic', legalName: 'Kabulonga Family Clinic Limited', registrationNo: '120190012345', licenceNo: 'HPCZ-HF-2290', contactName: 'Sister Mwila Chanda', email: 'clinic@demo.kgotla', phone: '+260971000200', status: 'approved' },
@@ -196,6 +220,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       { code: 'dr-mwansa', type: 'doctor', tradingName: 'Dr Chileshe Mwansa', legalName: 'Mwansa Medical Practice', registrationNo: '120220011122', licenceNo: 'HPCZ-MP-7735', contactName: 'Dr Chileshe Mwansa', email: 'doctor@demo.kgotla', phone: '+260971000400', status: 'applied' },
       { code: 'nsefu-bend', type: 'hotel', tradingName: 'Nsefu Bend Camp', legalName: 'Nsefu Bend Camp Limited', registrationNo: '120160033221', licenceNo: 'MoT-TEL-1452', contactName: 'Mutinta Hamoonga', email: 'hotel@demo.kgotla', phone: '+260971000500', status: 'approved' },
       { code: 'kafue-canoe', type: 'tour_operator', tradingName: 'Kafue Canoe Trails', legalName: 'Kafue Canoe Trails Limited', registrationNo: '120170044332', licenceNo: 'MoT-TEL-1688', contactName: 'Bupe Kasonde', email: 'safari@demo.kgotla', phone: '+260971000600', status: 'approved' },
+      { code: 'nkhwazi-reserve', type: 'game_reserve', tradingName: 'Nkhwazi Private Reserve', legalName: 'Nkhwazi Private Reserve Limited', registrationNo: '120150022110', licenceNo: 'DNPW-GR-0331', contactName: 'Mulenga Chabala', email: 'reserve@demo.kgotla', phone: '+260971000700', status: 'approved' },
+      { code: 'mwela-transfers', type: 'transport', tradingName: 'Mwela Transfers', legalName: 'Mwela Transfers Limited', registrationNo: '120180055443', licenceNo: 'RTSA-PSV-2281', contactName: 'Joseph Sakala', email: 'driver@demo.kgotla', phone: '+260971000800', status: 'approved' },
     ],
   },
   ZW: {
@@ -213,6 +239,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       employer: R('CR', 'Companies and Other Business Entities Registry'),
       hotel: R('ZTA', 'Zimbabwe Tourism Authority (registration and licensing)'),
       tour_operator: R('ZTA', 'Zimbabwe Tourism Authority (registration and licensing)'),
+      game_reserve: R('ZimParks', 'Zimbabwe Parks and Wildlife Management Authority (wildlife ranch) / ZTA'),
+      transport: R('ZTA', 'Zimbabwe Tourism Authority (tour operator and transfer licence) / VID'),
     },
     demo: [
       { code: 'avondale-clinic', type: 'clinic', tradingName: 'Avondale Family Clinic', legalName: 'Avondale Family Clinic (Private) Limited', registrationNo: '4521/2017', licenceNo: 'MoHCC-HF-118', contactName: 'Sister Nyasha Mapfumo', email: 'clinic@demo.kgotla', phone: '+263771000200', status: 'approved' },
@@ -220,6 +248,8 @@ export const COUNTRY_PARTNERS: Record<CountryPack['code'], CountryPartners> = {
       { code: 'dr-moyo', type: 'doctor', tradingName: 'Dr Tafadzwa Moyo', legalName: 'Moyo Medical Practice', registrationNo: '3310/2022', licenceNo: 'MDPCZ-6623', contactName: 'Dr Tafadzwa Moyo', email: 'doctor@demo.kgotla', phone: '+263771000400', status: 'applied' },
       { code: 'mosi-gorge', type: 'hotel', tradingName: 'Mosi Gorge Lodge', legalName: 'Mosi Gorge Lodge (Private) Limited', registrationNo: '2210/2016', licenceNo: 'ZTA-AC-3302', contactName: 'Rumbidzai Chari', email: 'hotel@demo.kgotla', phone: '+263771000500', status: 'approved' },
       { code: 'spray-mist', type: 'tour_operator', tradingName: 'Spray Mist Tours', legalName: 'Spray Mist Tours (Private) Limited', registrationNo: '3341/2018', licenceNo: 'ZTA-TO-1190', contactName: 'Tatenda Banda', email: 'safari@demo.kgotla', phone: '+263771000600', status: 'approved' },
+      { code: 'nyamakuku-reserve', type: 'game_reserve', tradingName: 'Nyamakuku Private Reserve', legalName: 'Nyamakuku Private Reserve (Private) Limited', registrationNo: '1877/2014', licenceNo: 'ZP-WR-0219', contactName: 'Rufaro Dube', email: 'reserve@demo.kgotla', phone: '+263771000700', status: 'approved' },
+      { code: 'mhepo-transfers', type: 'transport', tradingName: 'Mhepo Transfers', legalName: 'Mhepo Transfers (Private) Limited', registrationNo: '4402/2019', licenceNo: 'ZTA-TR-0876', contactName: 'Kudakwashe Ncube', email: 'driver@demo.kgotla', phone: '+263771000800', status: 'approved' },
     ],
   },
 };

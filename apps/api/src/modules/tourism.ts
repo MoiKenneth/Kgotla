@@ -25,11 +25,15 @@ import { issueDocument } from './vault.js';
  * until the listing's cut-off.
  */
 
-export type Kind = 'stay' | 'safari' | 'park';
+export type Kind = 'stay' | 'safari' | 'park' | 'reserve' | 'driver';
+export const KINDS: Kind[] = ['park', 'reserve', 'stay', 'safari', 'driver'];
+export const CATEGORIES: Record<string, string[]> = { stay: ['lodge', 'hotel', 'camp', 'guesthouse'], driver: ['transfer', 'driver_guide'] };
+/** Units priced per item regardless of length (a game drive, a transfer); the rest are per night or day. */
+const flat = (unit: string) => unit === 'person' || unit === 'trip';
 const MAX_AHEAD_DAYS = 365;
 
 const addDays = (date: string, n: number) => new Date(Date.parse(date + 'T00:00:00Z') + n * 86400_000).toISOString().slice(0, 10);
-const unitWord = (unit: string) => (unit === 'room_night' ? 'room per night' : unit === 'person_day' ? 'person per day' : 'person');
+const unitWord = (unit: string) => ({ room_night: 'room per night', person_day: 'person per day', person: 'person', vehicle_day: 'vehicle per day', trip: 'vehicle, one way' } as Record<string, string>)[unit] ?? unit;
 
 function view(r: any) {
   const rates = (r.rates as any[]).map((x) => ({ ...x, priceText: fmt(x.price) }));
@@ -37,6 +41,7 @@ function view(r: any) {
   return {
     id: r.id,
     kind: r.kind as Kind,
+    category: r.category ?? null,
     name: r.name,
     region: r.region,
     description: r.description,
@@ -57,15 +62,16 @@ function view(r: any) {
 const listingSql = `SELECT l.*, p.status AS partner_status, COALESCE(p.trading_name, i.name, l.agency) AS provider_name
   FROM tourism_listings l LEFT JOIN partners p ON p.id = l.partner_id LEFT JOIN issuers i ON i.id = l.agency`;
 
-export async function listListings(db: Queryable, f: { kind?: string; region?: string; q?: string }) {
+export async function listListings(db: Queryable, f: { kind?: string; region?: string; q?: string; category?: string }) {
   const rows = await many<any>(
     db,
     `${listingSql}
       WHERE l.active AND (l.partner_id IS NULL OR p.status = 'approved')
         AND ($1::text IS NULL OR l.kind = $1) AND ($2::text IS NULL OR l.region = $2)
         AND ($3::text IS NULL OR l.name ILIKE '%' || $3 || '%' OR l.region ILIKE '%' || $3 || '%' OR l.description ILIKE '%' || $3 || '%')
-      ORDER BY CASE l.kind WHEN 'park' THEN 0 WHEN 'stay' THEN 1 ELSE 2 END, l.name`,
-    [f.kind || null, f.region || null, f.q?.trim() || null],
+        AND ($4::text IS NULL OR l.category = $4)
+      ORDER BY array_position(ARRAY['park','reserve','stay','safari','driver'], l.kind), l.name`,
+    [f.kind || null, f.region || null, f.q?.trim() || null, f.category || null],
   );
   const regions = await many<{ region: string }>(db, `SELECT DISTINCT region FROM tourism_listings WHERE active ORDER BY region`);
   return { listings: rows.map(view), regions: regions.map((r) => r.region) };
@@ -114,10 +120,11 @@ export function quote(r: any, p: BookInput) {
   const today = localDate();
   if (p.startDate < today) throw badRequest('invalid_date', 'Choose a date from today onwards');
   if (p.startDate > addDays(today, MAX_AHEAD_DAYS)) throw badRequest('invalid_date', 'Bookings open up to a year ahead');
-  const days = r.kind === 'safari' ? r.duration_days : p.days ?? 1;
-  if (r.kind !== 'safari' && days > 14) throw badRequest('too_long', 'Book up to 14 nights or days at a time');
-  if (p.quantity > r.capacity) throw badRequest('too_many', `At most ${r.capacity} ${r.unit === 'room_night' ? 'rooms' : 'people'} per booking here`);
-  const units = r.unit === 'person' ? p.quantity : p.quantity * days;
+  const fixedLength = r.kind === 'safari' || flat(r.unit);
+  const days = fixedLength ? r.duration_days : p.days ?? 1;
+  if (!fixedLength && days > 14) throw badRequest('too_long', 'Book up to 14 nights or days at a time');
+  if (p.quantity > r.capacity) throw badRequest('too_many', `At most ${r.capacity} ${r.unit === 'room_night' ? 'rooms' : r.unit === 'vehicle_day' || r.unit === 'trip' ? 'vehicles' : 'people'} per booking here`);
+  const units = flat(r.unit) ? p.quantity : p.quantity * days;
   const total = rate.price * units;
   const end = addDays(p.startDate, days);
   const cutoff = new Date(slotInstant(p.startDate, '00:00').getTime() - r.cancel_hours * 3600_000);
@@ -130,7 +137,9 @@ function datesText(r: any, start: string, days: number) {
   return `${dayLabel(start)} → ${dayLabel(addDays(start, days - 1))} · ${days} days`;
 }
 
-const qtyText = (r: any, n: number) => (r.unit === 'room_night' ? `${n} room${n > 1 ? 's' : ''}` : `${n} ${n > 1 ? 'people' : 'person'}`);
+const qtyText = (r: any, n: number) =>
+  r.unit === 'room_night' ? `${n} room${n > 1 ? 's' : ''}` : r.unit === 'vehicle_day' || r.unit === 'trip' ? `${n} vehicle${n > 1 ? 's' : ''}` : `${n} ${n > 1 ? 'people' : 'person'}`;
+const qtyLabel = (r: any) => (r.unit === 'room_night' ? 'Rooms' : r.unit === 'vehicle_day' || r.unit === 'trip' ? 'Vehicles' : 'People');
 
 /** Prepare step of the book_tourism action: validated read-back, nothing reserved yet. */
 export async function prepareBooking(db: Queryable, p: BookInput) {
@@ -148,7 +157,7 @@ export async function prepareBooking(db: Queryable, p: BookInput) {
     readback: [
       ['Where', r.name],
       ['When', datesText(r, p.startDate, q.days)],
-      [r.unit === 'room_night' ? 'Rooms' : 'People', `${qtyText(r, p.quantity)} · ${q.rate.label}`],
+      [qtyLabel(r), `${qtyText(r, p.quantity)} · ${q.rate.label}`],
       ['Price', `${fmt(q.rate.price)} per ${unitWord(r.unit)}`],
       ['Total', fmt(q.total)],
       ['Free cancellation', q.cutoff.getTime() > Date.now() ? `Until ${dayLabel(q.cutoff)}, ${timeLabel(q.cutoff)}` : 'Not refundable (too close to the date)'],
@@ -184,9 +193,8 @@ export async function executeBooking(db: Queryable, citizenId: string, p: BookIn
     [ref, r.id, citizenId, p.startDate, q.days, p.rateKey, p.quantity, q.total, actionId],
   );
   const issuer = r.partner_id ? (await one<any>(db, 'SELECT code FROM partners WHERE id = $1', [r.partner_id])).code : r.agency;
-  const title = r.kind === 'park'
-    ? `Park permit · ${r.name} · ${datesText(r, p.startDate, q.days)} · ${qtyText(r, p.quantity)}`
-    : `${r.kind === 'stay' ? 'Booking' : 'Safari booking'} · ${r.name} · ${datesText(r, p.startDate, q.days)}`;
+  const what = { park: 'Park permit', reserve: 'Reserve booking', stay: 'Booking', safari: 'Safari booking', driver: r.category === 'transfer' ? 'Transfer booking' : 'Driver booking' }[r.kind as Kind];
+  const title = `${what} · ${r.name} · ${datesText(r, p.startDate, q.days)}${r.kind === 'stay' ? '' : ` · ${qtyText(r, p.quantity)}`}`;
   const docId = await issueDocument(
     db,
     citizenId,
@@ -294,13 +302,21 @@ export const listingSchema = z.object({
   durationDays: z.number().int().min(1).max(30).default(1),
   cancelHours: z.number().int().min(0).max(720).default(48),
   active: z.boolean().default(true),
+  /** Stays: lodge, hotel, camp or guesthouse. Drivers: transfer or driver_guide. */
+  category: z.string().max(20).optional(),
+  /** Game reserves: person_day (entry) or person (a drive). Drivers: vehicle_day or trip. */
+  unit: z.enum(['person_day', 'person', 'vehicle_day', 'trip']).optional(),
 });
 
 export async function upsertListing(db: Queryable, partnerId: string, l: z.infer<typeof listingSchema>) {
   const p = await one<any>(db, 'SELECT code, type, status, capabilities FROM partners WHERE id = $1', [partnerId]);
   if (!p || p.status !== 'approved') throw forbidden('Your partner account is not active');
   if (!(p.capabilities as string[]).includes(LISTINGS_MANAGE)) throw forbidden('Your approval does not include tourism listings');
-  const kind: Kind = p.type === 'hotel' ? 'stay' : 'safari';
+  const kind: Kind = ({ hotel: 'stay', tour_operator: 'safari', game_reserve: 'reserve', transport: 'driver' } as Record<string, Kind>)[p.type] ?? 'safari';
+  const unit = kind === 'stay' ? 'room_night' : kind === 'safari' ? 'person'
+    : kind === 'reserve' ? (l.unit === 'person' ? 'person' : 'person_day')
+    : l.unit === 'trip' ? 'trip' : 'vehicle_day';
+  if (l.category && !(CATEGORIES[kind] ?? []).includes(l.category)) throw badRequest('invalid_category', `Category for this listing: ${(CATEGORIES[kind] ?? []).join(', ') || 'none'}`);
   const { toThebe } = await import('../lib/money.js');
   const rates = l.rates.map((r) => ({ key: r.key, label: r.label, price: toThebe(r.price) }));
   if (rates.some((r) => r.price <= 0)) throw badRequest('invalid_price', 'Every rate needs a price above zero');
@@ -308,11 +324,11 @@ export async function upsertListing(db: Queryable, partnerId: string, l: z.infer
   const owner = await one<any>(db, 'SELECT partner_id FROM tourism_listings WHERE id = $1', [id]);
   if (owner && owner.partner_id !== partnerId) throw conflict('taken', 'That listing id belongs to someone else');
   await db.query(
-    `INSERT INTO tourism_listings (id, kind, name, region, description, highlights, unit, rates, capacity, duration_days, cancel_hours, partner_id, active)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, region = EXCLUDED.region, description = EXCLUDED.description, highlights = EXCLUDED.highlights,
-       rates = EXCLUDED.rates, capacity = EXCLUDED.capacity, duration_days = EXCLUDED.duration_days, cancel_hours = EXCLUDED.cancel_hours, active = EXCLUDED.active`,
-    [id, kind, l.name, l.region, l.description, l.highlights, kind === 'stay' ? 'room_night' : 'person', JSON.stringify(rates), l.capacity, kind === 'stay' ? 1 : l.durationDays, l.cancelHours, partnerId, l.active],
+    `INSERT INTO tourism_listings (id, kind, name, region, description, highlights, unit, rates, capacity, duration_days, cancel_hours, partner_id, active, category)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+     ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, region = EXCLUDED.region, description = EXCLUDED.description, highlights = EXCLUDED.highlights, unit = EXCLUDED.unit,
+       rates = EXCLUDED.rates, capacity = EXCLUDED.capacity, duration_days = EXCLUDED.duration_days, cancel_hours = EXCLUDED.cancel_hours, active = EXCLUDED.active, category = EXCLUDED.category`,
+    [id, kind, l.name, l.region, l.description, l.highlights, unit, JSON.stringify(rates), l.capacity, kind === 'safari' ? l.durationDays : 1, l.cancelHours, partnerId, l.active, l.category ?? (kind === 'stay' ? 'lodge' : null)],
   );
   await audit(db, `partner:${partnerId}`, 'tourism.listing_saved', `listing:${id}`, { kind, active: l.active });
   return view(await one<any>(db, `${listingSql} WHERE l.id = $1`, [id]));
@@ -380,20 +396,55 @@ export async function seedTourismReference(db: Queryable) {
   const t = COUNTRY_TOURISM[country().code];
   await db.query('INSERT INTO issuers (id, name, api_key_hash) VALUES ($1,$2,$3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name', [t.parksAgency.code, t.parksAgency.name, 'agency']);
   await ensureAccount(db, `payable:agency:${t.parksAgency.code}`, 'liability', `Fees payable · ${t.parksAgency.code}`);
+  await seedParks(db);
 }
 
-async function insertSeed(db: Queryable, l: ListingSeed, id: string, owner: { partnerId?: string; agency?: string }) {
+async function insertSeed(db: Queryable, l: ListingSeed, id: string, owner: { partnerId?: string; agency?: string }, active = true) {
   await db.query(
-    `INSERT INTO tourism_listings (id, kind, name, region, description, highlights, unit, rates, capacity, duration_days, cancel_hours, partner_id, agency)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) ON CONFLICT (id) DO NOTHING`,
-    [id, l.kind, l.name, l.region, l.description, l.highlights, l.unit, JSON.stringify(l.rates), l.capacity, l.durationDays ?? 1, l.cancelHours, owner.partnerId ?? null, owner.agency ?? null],
+    `INSERT INTO tourism_listings (id, kind, name, region, description, highlights, unit, rates, capacity, duration_days, cancel_hours, partner_id, agency, category, active)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) ON CONFLICT (id) DO NOTHING`,
+    [id, l.kind, l.name, l.region, l.description, l.highlights, l.unit, JSON.stringify(l.rates), l.capacity, l.durationDays ?? 1, l.cancelHours, owner.partnerId ?? null, owner.agency ?? null, l.category ?? null, active],
   );
+}
+
+/**
+ * Parks are created in every cell. In a live cell they start hidden: the parks
+ * agency (or a Kgotla admin) enters the real fees and switches each park on.
+ */
+export async function seedParks(db: Queryable) {
+  const t = COUNTRY_TOURISM[country().code];
+  for (const p of t.parks) await insertSeed(db, p, `park-${p.key}`, { agency: t.parksAgency.code }, config.demoMode);
+}
+
+export const parkSchema = z.object({
+  active: z.boolean(),
+  capacity: z.number().int().min(1).max(5000).optional(),
+  cancelHours: z.number().int().min(0).max(720).optional(),
+  rates: z.array(z.object({ key: z.string().min(1).max(30), price: z.union([z.string(), z.number()]) })).optional(),
+});
+
+export async function listParks(db: Queryable) {
+  return (await many<any>(db, `${listingSql} WHERE l.kind = 'park' AND l.agency = $1 ORDER BY l.name`, [parksAgency().code])).map((r) => ({ ...view(r), active: r.active }));
+}
+
+/** The parks agency sets real fees and opens a park for booking. */
+export async function updatePark(db: Queryable, officerId: string, id: string, u: z.infer<typeof parkSchema>) {
+  const r = await one<any>(db, `SELECT * FROM tourism_listings WHERE id = $1 AND kind = 'park' AND agency = $2 FOR UPDATE`, [id, parksAgency().code]);
+  if (!r) throw notFound('Park not found');
+  const { toThebe } = await import('../lib/money.js');
+  const rates = (r.rates as any[]).map((x) => {
+    const n = u.rates?.find((y) => y.key === x.key);
+    return n ? { ...x, price: toThebe(n.price) } : x;
+  });
+  if (rates.some((x) => !(x.price > 0))) throw badRequest('invalid_price', 'Every fee must be above zero');
+  await db.query('UPDATE tourism_listings SET active = $2, rates = $3, capacity = COALESCE($4, capacity), cancel_hours = COALESCE($5, cancel_hours) WHERE id = $1', [id, u.active, JSON.stringify(rates), u.capacity ?? null, u.cancelHours ?? null]);
+  await audit(db, `officer:${officerId}`, 'tourism.park_updated', `listing:${id}`, { active: u.active, rates: rates.map((x) => [x.key, x.price]) });
+  return { ...view(await one<any>(db, `${listingSql} WHERE l.id = $1`, [id])), active: u.active };
 }
 
 /** Demo cells: parks with demo fees, the demo hotel's and tour operator's listings, and a gate officer. */
 export async function seedTourismDemo(db: Queryable, password: string, log: (m: string) => void) {
   const t = COUNTRY_TOURISM[country().code];
-  for (const p of t.parks) await insertSeed(db, p, `park-${p.key}`, { agency: t.parksAgency.code });
   for (const [code, list] of Object.entries(t.demoListings)) {
     const p = await one<any>(db, 'SELECT id FROM partners WHERE code = $1', [code]);
     if (!p) continue;

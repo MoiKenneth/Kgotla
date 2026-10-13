@@ -7,8 +7,10 @@ Citizens find and book national park entry, places to stay, and safaris and tour
 | Kind | Sold by | Priced per | Example |
 |---|---|---|---|
 | **Park** entry | The country's parks agency (DWNP in Botswana, SANParks, MEFT in Namibia, DNPW in Zambia, ZimParks) | person per day, with citizen, SADC-resident and international rates | Chobe National Park, 2 days, 3 people at the citizen rate |
-| **Stay** | Hotels, lodges, guesthouses and camps onboarded as partners | room per night, with room types as rates | Two nights in a family room |
+| **Stay** | Lodges, hotels, camps and guesthouses onboarded as partners (filter by category) | room per night, with room types as rates | Two nights in a family room |
 | **Safari or tour** | Safari and tour operators onboarded as partners | person, for a fixed length | A 3-day camping safari for 2 adults |
+| **Game reserve** | Private game reserves and conservancies (partner type `game_reserve`) | person per day (entry), or person (a guided game drive) | Day entry at citizen rate, or a 3-hour game drive |
+| **Driver or transfer** | Drivers, driver-guides and transfer companies (partner type `transport`) | vehicle per day (driver-guide), or vehicle per trip (airport transfer) | A minibus from the airport to the lodge |
 
 Every listing has a daily **capacity** (rooms, seats or permits). Kgotla never sells more than that on any day, even when two people book the last room at the same time. Bookings that overlap partly are counted night by night.
 

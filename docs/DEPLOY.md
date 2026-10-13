@@ -39,6 +39,8 @@ Set a repository **variable** (Settings → Secrets and variables → Actions �
 |---|---|---|
 | `KGOTLA_CELLS` | `["BW","ZA","NA","ZM","ZW"]` | `["BW"]` |
 | `AZURE_LOCATION` | `southafricanorth` | `southafricanorth` |
+| `KGOTLA_MODE` | `live` | `demo` |
+| `PAYPAL_ENV`, `PAYPAL_FX_RATE`, `DPO_SERVICE_TYPE`, `TWILIO_FROM` | see [GO-LIVE.md](GO-LIVE.md) | off |
 
 Then run the workflow again. You can also type a list into the **Run workflow** box for a one-off run. Removing a country from the list stops deploying it but does not delete it; delete it on purpose with `az group delete --name kgotla-za`.
 

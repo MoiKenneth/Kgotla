@@ -38,6 +38,34 @@ export const config = {
   webDir: env.WEB_DIR ?? '',
   /** Country pack for this cell: BW, ZA, NA, ZM or ZW. */
   country: (env.KGOTLA_COUNTRY ?? 'BW').toUpperCase(),
+  /**
+   * How sign-up checks identity. 'mock': the demo registry. 'open': no registry
+   * link yet, so people declare their details, prove their phone by SMS and get
+   * assurance level 2 (government services that need level 3 stay locked).
+   */
+  registryMode: (env.REGISTRY_MODE ?? (bool(env.DEMO_MODE, !production) ? 'mock' : 'open')) as 'mock' | 'open',
+  paypal: {
+    clientId: optional(env.PAYPAL_CLIENT_ID),
+    clientSecret: optional(env.PAYPAL_CLIENT_SECRET),
+    /** 'sandbox' (test money) or 'live'. */
+    env: (env.PAYPAL_ENV === 'live' ? 'live' : 'sandbox') as 'sandbox' | 'live',
+    /** PayPal does not settle in BWP, ZAR, NAD or ZMW: charges are made in this currency. */
+    currency: env.PAYPAL_CURRENCY ?? 'USD',
+    /** Local currency units per 1 unit of PAYPAL_CURRENCY. Empty = the country pack's default. */
+    fxRate: Number(env.PAYPAL_FX_RATE ?? 0) || 0,
+  },
+  dpo: {
+    companyToken: optional(env.DPO_COMPANY_TOKEN),
+    serviceType: optional(env.DPO_SERVICE_TYPE),
+    apiUrl: env.DPO_API_URL ?? 'https://secure.3gdirectpay.com/API/v6/',
+    payUrl: env.DPO_PAY_URL ?? 'https://secure.3gdirectpay.com/payv2.php?ID=',
+  },
+  twilio: {
+    accountSid: optional(env.TWILIO_ACCOUNT_SID),
+    authToken: optional(env.TWILIO_AUTH_TOKEN),
+    from: optional(env.TWILIO_FROM),
+    messagingServiceSid: optional(env.TWILIO_MESSAGING_SERVICE_SID),
+  },
 };
 
 export function assertConfig(): void {

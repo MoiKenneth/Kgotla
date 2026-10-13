@@ -9,6 +9,10 @@ import {
   cancelTrip,
   gateCheckIn,
   gatePermits,
+  KINDS,
+  listParks,
+  parkSchema,
+  updatePark,
   listingDetail,
   listingSchema,
   listListings,
@@ -30,8 +34,8 @@ export function registerTourismRoutes(app: FastifyInstance, pool: pg.Pool) {
 
   // Browsing is open to everyone, so visitors can plan before they sign in. Booking needs an account.
   app.get('/v1/tourism/listings', async (req) => {
-    const { kind, region, q: text } = q(req);
-    return listListings(pool, { kind: kind && ['stay', 'safari', 'park'].includes(kind) ? kind : undefined, region, q: text?.slice(0, 60) });
+    const { kind, region, q: text, category } = q(req);
+    return listListings(pool, { kind: kind && (KINDS as string[]).includes(kind) ? kind : undefined, region, q: text?.slice(0, 60), category: category?.slice(0, 20) });
   });
   app.get('/v1/tourism/listings/:id', async (req) => listingDetail(pool, param(req, 'id'), q(req).from));
 
@@ -67,6 +71,15 @@ export function registerTourismRoutes(app: FastifyInstance, pool: pg.Pool) {
   app.post('/v1/officer/park-permits/:id/check-in', async (req) => {
     const o = gateOfficer(req);
     return tx(pool, (c) => gateCheckIn(c, parksAgency().code, param(req, 'id'), o.id));
+  });
+
+  app.get('/v1/officer/parks', async (req) => {
+    gateOfficer(req);
+    return listParks(pool);
+  });
+  app.put('/v1/officer/parks/:id', async (req) => {
+    const o = gateOfficer(req);
+    return tx(pool, (c) => updatePark(c, o.id, param(req, 'id'), body(parkSchema, req.body)));
   });
 
   // Services directory

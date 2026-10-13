@@ -192,7 +192,13 @@
     const bar = `<div class="obsteps">${['omang', 'otp', 'face', 'pin', 'done'].map((s, i, a) => `<i class="${i <= a.indexOf(p.step) ? 'on' : ''}"></i>`).join('')}</div>`;
     const head = `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button>${bar}`;
     const err = p.error ? `<p class="err">${esc(p.error)}</p>` : '';
-    if (p.step === 'omang') return { raw: `<div class="ob">${head}<h2>${t('ob2T')}</h2><p>${t('ob2B')}</p><div class="field"><label for="omang">${t('omang')}</label>${idInput(p, 'off')}</div>${err}${S.cfg && S.cfg.demoMode && PK().demo ? `<div class="demo-box">Demo: try ${PK().demo.signups.map((x) => `<b>${esc(x.id)}</b> (${esc(x.name.split(' ')[0])})`).join(' or ')}</div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolStart', '', 'sky')}</div>` };
+    if (p.step === 'omang') return { raw: `<div class="ob">${head}<h2>${t('ob2T')}</h2><p>${S.cfg && S.cfg.enrolment === 'open' ? t('ob2Bopen') : t('ob2B')}</p><div class="field"><label for="omang">${t('omang')}</label>${idInput(p, 'off')}</div>${S.cfg && S.cfg.enrolment === 'open' ? `<p style="font-weight:600;margin-top:4px">${t('openT')}</p><p class="hint">${t('openB')}</p>
+        <div class="field"><label for="fn">${t('firstName')}</label><input id="fn" autocomplete="given-name" value="${esc(p.fn || '')}"></div>
+        <div class="field"><label for="ln">${t('lastName')}</label><input id="ln" autocomplete="family-name" value="${esc(p.ln || '')}"></div>
+        <div class="field"><label for="dob">${t('dob')}</label><input id="dob" type="date" autocomplete="bday" value="${esc(p.dob || '')}"></div>
+        <div class="field"><label for="mob">${t('mobile')}</label><input id="mob" inputmode="tel" autocomplete="tel" placeholder="${esc(PK().phone.example)}" value="${esc(p.mob || '')}"></div>
+        <div class="field"><label for="dist">${t('district')}</label><input id="dist" autocomplete="address-level2" value="${esc(p.dist || '')}"></div>
+        <p class="hint">${t('level2Note')}</p>` : ''}${err}${S.cfg && S.cfg.demoMode && S.cfg.enrolment !== 'open' && PK().demo ? `<div class="demo-box">Demo: try ${PK().demo.signups.map((x) => `<b>${esc(x.id)}</b> (${esc(x.name.split(' ')[0])})`).join(' or ')}</div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolStart', '', 'sky')}</div>` };
     if (p.step === 'otp') return { raw: `<div class="ob">${head}<h2>${t('otpT')}</h2><p>${t('otpB', { p: esc(p.phoneMasked) })}</p><div class="field"><input id="otp" class="big mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>${err}${p.demoOtp ? `<div class="demo-box">${t('demoCode')}: <b>${esc(p.demoOtp)}</b></div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolOtp', '', 'sky')}</div>` };
     if (p.step === 'face') {
       return {
@@ -252,7 +258,7 @@
     const ap = m.appointments[0];
     if (ap) h += `<div class="card"><span class="chip good">${ic('clock', 12)} ${t('upcoming')}</span><p style="font-weight:600">${esc(ap.where)}</p><p style="font-size:12.5px;color:var(--muted)">${esc(fday(ap.starts_at))} · ${esc(ftime(ap.starts_at))} · ${esc(ap.purpose)}</p></div>`;
     h += `<h3 class="sec">${t('govSvc')}</h3><div class="tiles">${tile('car', 'sLic', 'licence')}${tile('receipt', 'sTax', 'tax')}${tile('person', 'sBirth', 'birth')}${tile('book', 'sPass', 'booking', 'passport')}${tile('ticket', 'sQueue', 'queue')}${tile('cross', 'sClinic', 'booking', 'clinic')}</div>
-      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('tree', 'tParks', 'travel', 'park')}${tile('bed', 'tStays', 'travel', 'stay')}${tile('compass', 'tSafaris', 'travel', 'safari')}</div>
+      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('bed', 'tLodges', 'travel', 'stay')}${tile('leaf', 'tReserves', 'travel', 'reserve')}${tile('tree', 'tParks', 'travel', 'park')}${tile('compass', 'tSafaris', 'travel', 'safari')}${tile('car', 'tDrivers', 'travel', 'driver')}${tile('map', 'tTrips', 'trips')}</div>
       ${(m.trips || []).filter((x) => x.status === 'confirmed').slice(0, 1).map((x) => `<button class="card" data-a="go" data-v="trips" style="text-align:left"><span class="chip good">${ic('map', 12)} ${esc(t('tTrips'))}</span><p style="font-weight:600">${esc(x.listing.name)}</p><p style="font-size:12.5px;color:var(--muted)">${esc(x.when)} · ${esc(x.quantityText)} · <span class="mono">${esc(x.ref)}</span></p></button>`).join('')}
       <button class="row card" data-a="go" data-v="directory" style="display:flex">${ic('globe', 20, 'lead')}<span class="main"><b>${t('allServices')}</b><small>${esc(t('dirT'))}</small></span>${ic('chev', 16)}</button>
       <h3 class="sec">${t('recent')}</h3><div class="list">${m.transactions.slice(0, 3).map(txRow).join('')}<button class="row" data-a="tab" data-v="pay"><span class="main"><b style="color:var(--sky)">${t('seeAll')}</b></span>${ic('chev', 16)}</button></div>`;
@@ -264,7 +270,7 @@
     body: `<h3 class="sec">${t('govSvc')}</h3><div class="tiles">${tile('car', 'sLic', 'licence')}${tile('receipt', 'sTax', 'tax')}${tile('person', 'sBirth', 'birth')}${tile('book', 'sPass', 'booking', 'passport')}${tile('ticket', 'sQueue', 'queue')}</div>
       <h3 class="sec">${t('money')}</h3><div class="tiles">${tile('send', 'send', 'send', '', 'money')}${tile('bolt', 'bills', 'bills', '', 'money')}${tile('phone', 'airtime', 'airtime', '', 'money')}</div>
       <h3 class="sec">${t('health')}</h3><div class="tiles">${tile('cross', 'sClinic', 'booking', 'clinic')}</div>
-      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('tree', 'tParks', 'travel', 'park')}${tile('bed', 'tStays', 'travel', 'stay')}${tile('compass', 'tSafaris', 'travel', 'safari')}${tile('map', 'tTrips', 'trips')}${tile('globe', 'allServices', 'directory')}</div>
+      <h3 class="sec">${t('travel')}</h3><div class="tiles">${tile('bed', 'tLodges', 'travel', 'stay')}${tile('leaf', 'tReserves', 'travel', 'reserve')}${tile('tree', 'tParks', 'travel', 'park')}${tile('compass', 'tSafaris', 'travel', 'safari')}${tile('car', 'tDrivers', 'travel', 'driver')}${tile('map', 'tTrips', 'trips')}${tile('globe', 'allServices', 'directory')}</div>
       <h3 class="sec">${t('farming')}</h3><div class="tiles">${soon('leaf', 'sAgri', 'Phase 1B')}</div>
       <h3 class="sec">${t('learning')} · ${t('work')}</h3><div class="tiles">${soon('cap', 'sSchool', 'Phase 2')}${soon('brief', 'sJobs', 'Phase 2')}</div>
       <p class="hint">${t('ussdHint')}</p>`,
@@ -279,7 +285,7 @@
       body: `<div class="idcard"><div class="stripe" style="background:${window.kgotlaBands ? window.kgotlaBands(PK().code) : 'var(--sky)'}"></div>
         <div class="body"><div class="avatar">${esc(u.firstName[0])}${esc(u.lastName[0])}</div>
         <dl><dt>${t('fName')}</dt><dd>${esc(u.firstName + ' ' + u.lastName)}</dd><dt>${esc(PK().nationalId.short)}</dt><dd class="mono">••••• ${esc(u.idLast4 || u.omangLast4)}</dd><dt>${t('fDob')}</dt><dd>${fd(u.dob + 'T12:00:00Z')}</dd><dt>${t('fAddr')}</dt><dd>${esc(u.district)}</dd></dl></div>
-        <div class="foot"><span style="display:flex;gap:6px;align-items:center;color:var(--good)">${ic('shield', 16)} ${t('verified')}</span><span class="chip">${esc(t('loa', { n: u.loa }))}</span></div></div>
+        <div class="foot"><span style="display:flex;gap:6px;align-items:center;color:var(--good)">${ic('shield', 16)} ${u.loa >= 3 ? t('verified') : t('notVerified')}</span><span class="chip">${esc(t('loa', { n: u.loa }))}</span></div></div>
         <button class="btn" data-a="go" data-v="idShare" data-k="full">${ic('qr', 18)} ${t('showQR')}</button>
         <button class="btn ghost" data-a="go" data-v="idShare" data-k="pick">${ic('share', 18)} ${t('shareSel')}</button>
         <h3 class="sec">${t('consentLog')}</h3>
@@ -376,13 +382,37 @@
         ${amountField(p, PK().chips.airtime)}${btn(t('review'), 'airReview')}`,
     };
   };
+  const methods = () => (S.cfg && S.cfg.paymentMethods) || [];
+  const methodName = (m) => m.id === 'test' ? `${m.name} (${t('testMoney')})` : m.name;
   V.topup = (p) => {
-    const sources = PK().topUpSources;
-    if (!sources.some((x) => x.id === p.src)) p.src = sources[0].id;
+    const ext = methods();
+    const sources = S.cfg && S.cfg.demoMode ? PK().topUpSources : [];
+    const opts = ext.map((m) => ({ id: 'ext:' + m.id, name: methodName(m), small: m.description, icon: m.id === 'paypal' ? 'wallet' : m.id === 'dpo' ? 'receipt' : 'shield' }))
+      .concat(sources.map((x) => ({ id: x.id, name: x.name, small: S.lang === 'tn' ? 'Teko (demo)' : 'Demo transfer', icon: 'phone' })));
+    if (!opts.some((x) => x.id === p.src)) p.src = opts.length ? opts[0].id : '';
+    const isExt = String(p.src).startsWith('ext:');
+    const m = isExt ? ext.find((x) => 'ext:' + x.id === p.src) : null;
     return {
       title: t('topup'),
-      body: `<div class="field"><label>${t('source')}</label><div style="display:grid;gap:8px">${sources.map((x) => `<button class="opt" aria-pressed="${p.src === x.id}" data-a="pick" data-f="src" data-val="${x.id}">${ic('phone', 20)}<span class="main"><b>${esc(x.name)}</b></span></button>`).join('')}</div></div>
-        ${amountField(p, PK().chips.topup)}${btn(t('review'), 'topReview')}`,
+      body: !opts.length ? `<p class="hint">${S.lang === 'tn' ? 'Ga go na tsela ya tuelo e e baakantsweng jaanong.' : 'No payment method is set up in this cell yet.'}</p>` : `<div class="field"><label>${t('topupMethods')}</label><div style="display:grid;gap:8px">${opts.map((x) => `<button class="opt" aria-pressed="${p.src === x.id}" data-a="pick" data-f="src" data-val="${x.id}">${ic(x.icon, 20)}<span class="main"><b>${esc(x.name)}</b><small>${esc(x.small || '')}</small></span></button>`).join('')}</div></div>
+        <p class="hint">${t('topupB')}</p>
+        ${amountField(p, PK().chips.topup)}${isExt ? btn(t('toProvider', { m: methodName(m) }), 'extTopup') : btn(t('review'), 'topReview')}`,
+    };
+  };
+
+  /** Show the result of a payment after coming back from PayPal or DPO. */
+  V.payresult = (p) => {
+    const r = p.r;
+    if (!r) return { title: t('topup'), body: `<div class="big-ok"><div class="ring">${ic('clock', 30)}</div><h4>${t('paying')}</h4></div>` };
+    const ok = r.status === 'paid';
+    const action = r.actionResult;
+    return {
+      title: ok ? t('paidT') : t('topup'),
+      body: `<div class="big-ok"><div class="ring">${ic(ok ? 'check' : r.status === 'pending' ? 'clock' : 'x', 30)}</div>
+          <h4>${esc(ok ? t('paidT') : r.status === 'pending' ? t('paying') : r.status === 'cancelled' ? t('payCancelled') : t('payFailed'))}</h4>
+          <p>${esc(ok ? (action ? action.message || '' : t('paidB', { a: r.amountText })) : r.status === 'pending' ? t('payPending') : r.error || '')}</p>
+          ${r.charged && ok ? `<p class="hint">${esc(t('chargedAs', { c: r.charged }))}</p>` : ''}</div>
+        <button class="btn" data-a="tab" data-v="home">${t('done')}</button>`,
     };
   };
 
@@ -394,6 +424,7 @@
       body: `${readbackHtml(a.readback)}<p class="say">${ic('help', 16)} ${t('rbIntro')}</p>
         ${a.source === 'assistant' ? `<p class="hint">${S.lang === 'tn' ? 'E baakantswe ke mothusi.' : 'Prepared by the assistant.'}</p>` : ''}
         ${btn(a.requiresPin ? `${ic('shield', 18)} ${t('confirmPin')}` : t('confirm'), 'confirmAction')}
+        ${a.amount > 0 && methods().length ? `<p class="hint center">${t('orPay')}</p>${methods().map((m) => `<button class="btn ghost" data-a="extPay" data-val="${m.id}" ${UI.busy ? 'disabled' : ''}>${esc(t('payWith', { m: methodName(m) }))}</button>`).join('')}` : ''}
         <button class="btn ghost" data-a="cancelAction">${t('cancel')}</button>`,
     };
   };
@@ -499,20 +530,26 @@
   });
 
   // ---- travel & tourism
-  const KIND_KEY = { park: 'tParks', stay: 'tStays', safari: 'tSafaris' };
+  const KIND_KEY = { stay: 'tLodges', reserve: 'tReserves', park: 'tParks', safari: 'tSafaris', driver: 'tDrivers' };
+  const KIND_ICON = { stay: 'bed', reserve: 'leaf', park: 'tree', safari: 'compass', driver: 'car' };
+  const CATS = { stay: ['lodge', 'hotel', 'camp', 'guesthouse'], driver: ['transfer', 'driver_guide'] };
+  const isVehicle = (u) => u === 'vehicle_day' || u === 'trip';
+  const isFlat = (u) => u === 'person' || u === 'trip';
   V.travel = (p) => {
-    p.k = p.k || 'park';
-    const key = `${p.k}|${p.region || ''}|${p.q || ''}`;
+    p.k = KIND_KEY[p.k] ? p.k : 'stay';
+    if (p.cat && !(CATS[p.k] || []).includes(p.cat)) p.cat = '';
+    const key = `${p.k}|${p.region || ''}|${p.q || ''}|${p.cat || ''}`;
     if (p.key !== key) { p.key = key; p.res_state = null; }
-    const ok = onceLoad(p, 'res', () => api('GET', `/v1/tourism/listings?kind=${p.k}${p.region ? `&region=${encodeURIComponent(p.region)}` : ''}${p.q ? `&q=${encodeURIComponent(p.q)}` : ''}`));
-    const pills = `<div class="pills">${Object.keys(KIND_KEY).map((k) => `<button class="pill" aria-pressed="${p.k === k}" data-a="pick" data-f="k" data-val="${k}">${esc(t(KIND_KEY[k]))}</button>`).join('')}</div>`;
+    const ok = onceLoad(p, 'res', () => api('GET', `/v1/tourism/listings?kind=${p.k}${p.region ? `&region=${encodeURIComponent(p.region)}` : ''}${p.q ? `&q=${encodeURIComponent(p.q)}` : ''}${p.cat ? `&category=${p.cat}` : ''}`));
+    const pills = `<div class="pills kinds">${Object.keys(KIND_KEY).map((k) => `<button class="pill" aria-pressed="${p.k === k}" data-a="pick" data-f="k" data-val="${k}">${ic(KIND_ICON[k], 15)} ${esc(t(KIND_KEY[k]))}</button>`).join('')}</div>`
+      + (CATS[p.k] ? `<div class="pills">${[''].concat(CATS[p.k]).map((c) => `<button class="pill sm" aria-pressed="${(p.cat || '') === c}" data-a="pick" data-f="cat" data-val="${c}">${esc(c ? t('cat_' + c) : t('allL'))}</button>`).join('')}</div>` : '');
     let list = loading();
     if (ok) {
       const regions = p.res.regions;
       list = `<div class="row2"><select id="region" aria-label="${t('allRegions')}" data-a-change="region"><option value="">${t('allRegions')}</option>${regions.map((r) => `<option ${p.region === r ? 'selected' : ''}>${esc(r)}</option>`).join('')}</select></div>`
         + (p.res.listings.length ? p.res.listings.map((l) => `<button class="card listing" data-a="go" data-v="listing" data-id="${esc(l.id)}" style="text-align:left">
-          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><b style="font-size:15.5px">${esc(l.name)}</b>${ic(l.kind === 'park' ? 'tree' : l.kind === 'stay' ? 'bed' : 'compass', 20)}</div>
-          <small style="color:var(--muted)">${esc(l.region)} · ${esc(t('by', { p: l.provider }))}</small>
+          <div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start"><b style="font-size:15.5px">${esc(l.name)}</b>${ic(KIND_ICON[l.kind] || 'compass', 20)}</div>
+          <small style="color:var(--muted)">${l.category ? `${esc(t('cat_' + l.category))} · ` : ''}${esc(l.region)} · ${esc(t('by', { p: l.provider }))}</small>
           <p style="font-size:13px">${esc(l.description)}</p>
           <div class="pills">${l.highlights.slice(0, 3).map((x) => `<span class="chip">${esc(x)}</span>`).join('')}</div>
           <b style="font-size:14px">${esc(t('fromPer', { p: money(l.fromPrice), u: t('u_' + l.unit) }))}</b></button>`).join('') : `<p class="hint">—</p>`);
@@ -529,11 +566,12 @@
     if (!ok) return { title: t('travel'), body: p.l_state === 'error' ? `<p class="err">${esc(p.l_error)}</p>` : loading() };
     const l = p.l;
     p.rate = p.rate && l.rates.some((r) => r.key === p.rate) ? p.rate : l.rates[0].key;
-    p.qty = Math.max(1, Math.min(Number(p.qty) || (l.unit === 'room_night' ? 1 : 2), l.capacity, 20));
-    p.days = l.kind === 'safari' ? l.durationDays : Math.max(1, Math.min(Number(p.days) || (l.kind === 'stay' ? 2 : 1), 14));
+    const fixed = l.kind === 'safari' || isFlat(l.unit);
+    p.qty = Math.max(1, Math.min(Number(p.qty) || (l.unit === 'room_night' || isVehicle(l.unit) ? 1 : 2), l.capacity, 20));
+    p.days = fixed ? l.durationDays : Math.max(1, Math.min(Number(p.days) || (l.kind === 'stay' ? 2 : 1), 14));
     const rate = l.rates.find((r) => r.key === p.rate);
-    const units = l.unit === 'person' ? p.qty : p.qty * p.days;
-    const window = l.availability.slice(0, l.kind === 'safari' ? l.durationDays : p.days);
+    const units = isFlat(l.unit) ? p.qty : p.qty * p.days;
+    const window = l.availability.slice(0, p.days);
     const fits = window.every((d) => d.left >= p.qty);
     const step = (f, v, label) => `<div class="field"><label>${label}</label><div class="stepper"><button class="iconbtn" data-a="stepv" data-f="${f}" data-val="-1" aria-label="−">−</button><b>${v}</b><button class="iconbtn" data-a="stepv" data-f="${f}" data-val="1" aria-label="+">+</button></div></div>`;
     return {
@@ -544,7 +582,7 @@
         <div class="field"><label>${t('rateL')}</label><div style="display:grid;gap:8px">${l.rates.map((r) => `<button class="opt" aria-pressed="${p.rate === r.key}" data-a="pick" data-f="rate" data-val="${esc(r.key)}"><span class="main"><b>${esc(r.label)}</b><small>${money(r.price)} · ${esc(t('u_' + l.unit))}</small></span></button>`).join('')}</div></div>
         <div class="field"><label for="startDate">${t('arrive')}</label><input id="startDate" type="date" min="${todayLocal()}" value="${p.start}" data-a-change="startDate"></div>
         <div class="avail">${l.availability.map((d, i) => `<span class="${d.left === 0 ? 'full' : i < window.length ? 'in' : ''}" title="${esc(d.label)}"><b>${esc(d.label.split(' ').slice(0, 2).join(' '))}</b>${d.left ? esc(t('spaceLeft', { n: d.left })) : esc(t('fullL'))}</span>`).join('')}</div>
-        <div class="row2">${l.kind === 'safari' ? `<p class="hint">${esc(t('lengthFixed', { d: l.durationDays }))}</p>` : step('days', p.days, t(l.kind === 'stay' ? 'nightsL' : 'daysL'))}${step('qty', p.qty, t(l.unit === 'room_night' ? 'roomsL' : 'peopleL'))}</div>
+        <div class="row2">${fixed ? `<p class="hint">${esc(l.unit === 'trip' ? t('oneTrip') : t('lengthFixed', { d: l.durationDays }))}</p>` : step('days', p.days, t(l.kind === 'stay' ? 'nightsL' : 'daysL'))}${step('qty', p.qty, t(l.unit === 'room_night' ? 'roomsL' : isVehicle(l.unit) ? 'vehiclesL' : 'peopleL'))}</div>
         <div class="card"><div style="display:flex;justify-content:space-between"><span>${t('totalL')}</span><b style="font-size:19px">${money(rate.price * units)}</b></div></div>
         ${fits ? '' : `<p class="err">${esc(t('fullL'))}</p>`}
         ${btn(t('review'), 'tourReview', fits ? '' : 'disabled')}`,
@@ -659,7 +697,9 @@
       const unread = S.me ? S.me.unread : 0;
       const root = S.stack[0] ? S.stack[0].v : 'home';
       html += (S.cfg && S.cfg.demoMode ? `<div class="banner demo">${esc(t('demo'))}</div>` : '') + (S.offline ? `<div class="banner offline">${esc(t('offline'))}</div>` : '');
-      html += `<div class="ab">${S.stack.length > 1 ? `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button><h2>${esc(out.title || '')}</h2>` : `<span class="logo"><span class="mini-flag" title="${esc(PK().name)}">${flag()}</span>${r.v === 'home' ? 'Kgotla' : esc(out.title || 'Kgotla')}</span>`}
+      // The Kgotla mark always takes you back to the dashboard (home), from any screen.
+      const homeMark = (withName) => `<button class="logo${withName ? '' : ' mini'}" data-a="tab" data-v="home" aria-label="${t('home')} · Kgotla"><span class="mini-flag" title="${esc(PK().name)}">${flag()}</span>${withName}</button>`;
+      html += `<div class="ab">${S.stack.length > 1 ? `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button>${S.token ? homeMark('') : ''}<h2>${esc(out.title || '')}</h2>` : homeMark(r.v === 'home' ? 'Kgotla' : esc(out.title || 'Kgotla'))}
         ${r.v === 'home' ? `<button class="iconbtn" data-a="go" data-v="services" aria-label="${t('services')}">${ic('plus', 22)}</button>` : ''}
         <button class="iconbtn" data-a="go" data-v="notifs" aria-label="${t('notifs')}">${ic('bell', 22)}${unread ? `<span class="badge">${unread}</span>` : ''}</button>
         <button class="iconbtn" data-a="go" data-v="settings" aria-label="${t('settings')}">${ic('gear', 22)}</button></div>
@@ -739,7 +779,9 @@
     // enrolment
     enrolStart: async () => {
       const p = cur().p; keepForm(p); UI.busy = true; render();
-      try { const r = await api('POST', '/v1/enrol/start', { nationalId: p.omang }); Object.assign(p, r, { step: 'otp', error: '' }); }
+      const open = S.cfg && S.cfg.enrolment === 'open';
+      if (open) { p.fn = val('fn'); p.ln = val('ln'); p.dob = val('dob'); p.mob = val('mob'); p.dist = val('dist'); }
+      try { const r = await api('POST', '/v1/enrol/start', open ? { nationalId: p.omang, firstName: p.fn, lastName: p.ln, dob: p.dob, phone: p.mob, district: p.dist } : { nationalId: p.omang }); Object.assign(p, r, { step: 'otp', error: '' }); }
       catch (e) { p.error = e.message; }
       UI.busy = false; render(true);
     },
@@ -799,6 +841,20 @@
     leaveQ: async () => { try { await api('POST', '/v1/me/queue/leave'); await refresh(); } catch (e) { fail(e); } },
     confirmAction: () => confirmAction(cur().p.action),
     cancelAction: async () => { const a = cur().p.action; try { await api('POST', `/v1/actions/${a.id}/cancel`); } catch (e) {} back(); },
+
+    // payments in (PayPal, DPO, test)
+    extTopup: async () => {
+      const p = cur().p; keepForm(p); if (UI.busy) return;
+      UI.busy = true; render();
+      try { const r = await api('POST', '/v1/me/payments', { provider: p.src.slice(4), amount: p.amt || '' }); location.assign(r.redirectUrl); }
+      catch (e) { fail(e); }
+    },
+    extPay: async (d) => {
+      const a = cur().p.action; if (UI.busy) return;
+      UI.busy = true; render();
+      try { const r = await api('POST', '/v1/me/payments', { provider: d.val, actionId: a.id }); location.assign(r.redirectUrl); }
+      catch (e) { fail(e); }
+    },
 
     // travel
     stepv: (d) => { const p = cur().p; p[d.f] = (Number(p[d.f]) || 1) + Number(d.val); render(); },
@@ -898,8 +954,24 @@
     if (!PK().languages.some((l) => l.code === S.lang)) { S.lang = PK().languages[0].code; store.set('kg.lang', S.lang); }
     document.title = `Kgotla · ${PK().name}`;
     S.stack = [{ v: S.token ? 'home' : 'welcome', p: {} }];
-    render(true);
-    if (S.token) refresh().catch(() => {});
+    // Back from PayPal or DPO Pay: confirm the payment with the server (which asks the provider).
+    const q = new URLSearchParams(location.search);
+    const paymentId = q.get('payment');
+    if (paymentId) history.replaceState(null, '', location.pathname);
+    if (paymentId && S.token) {
+      const p = {}; S.stack.push({ v: 'payresult', p });
+      render(true);
+      for (let i = 0; i < 6; i++) {
+        try { p.r = await api('POST', `/v1/me/payments/${encodeURIComponent(paymentId)}/complete`, {}); } catch (e) { p.r = { status: 'failed', error: e.message }; }
+        if (p.r.status !== 'pending' || q.get('cancelled')) break;
+        await new Promise((res) => setTimeout(res, 2500));
+      }
+      render();
+      refresh({ render: false }).then(() => render()).catch(() => {});
+    } else {
+      render(true);
+    }
+    if (S.token && !paymentId) refresh().catch(() => {});
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
   })();
 })();

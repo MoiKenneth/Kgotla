@@ -12,6 +12,14 @@ param deployApp bool
 param image string
 param demoMode bool
 param minReplicas int
+@description('PayPal environment: sandbox (test money) or live.')
+param paypalEnv string = 'sandbox'
+@description('Local currency per 1 USD for PayPal charges. Empty uses the built-in default; set the real rate.')
+param paypalFxRate string = ''
+@description('DPO Pay service type number from the DPO merchant account.')
+param dpoServiceType string = ''
+@description('Twilio sender: a phone number or alphanumeric sender id.')
+param twilioFrom string = ''
 
 var cc = toLower(code)
 var suffix = uniqueString(resourceGroup().id)
@@ -105,7 +113,17 @@ resource allowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@202
   dependsOn: [db]
 }
 
-var secretNames = ['kgotla-secret', 'anthropic-api-key', 'demo-officer-password']
+var secretNames = [
+  'kgotla-secret'
+  'anthropic-api-key'
+  'demo-officer-password'
+  'admin-bootstrap-password'
+  'paypal-client-id'
+  'paypal-client-secret'
+  'dpo-company-token'
+  'twilio-account-sid'
+  'twilio-auth-token'
+]
 
 resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
   name: appName
@@ -157,6 +175,18 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
             { name: 'KGOTLA_SECRET', secretRef: 'kgotla-secret' }
             { name: 'ANTHROPIC_API_KEY', secretRef: 'anthropic-api-key' }
             { name: 'DEMO_OFFICER_PASSWORD', secretRef: 'demo-officer-password' }
+            // Live cells: open sign-up (no registry link yet), the first admin, real payments and SMS.
+            { name: 'REGISTRY_MODE', value: demoMode ? 'mock' : 'open' }
+            { name: 'ADMIN_BOOTSTRAP_PASSWORD', secretRef: 'admin-bootstrap-password' }
+            { name: 'PAYPAL_CLIENT_ID', secretRef: 'paypal-client-id' }
+            { name: 'PAYPAL_CLIENT_SECRET', secretRef: 'paypal-client-secret' }
+            { name: 'PAYPAL_ENV', value: paypalEnv }
+            { name: 'PAYPAL_FX_RATE', value: paypalFxRate }
+            { name: 'DPO_COMPANY_TOKEN', secretRef: 'dpo-company-token' }
+            { name: 'DPO_SERVICE_TYPE', value: dpoServiceType }
+            { name: 'TWILIO_ACCOUNT_SID', secretRef: 'twilio-account-sid' }
+            { name: 'TWILIO_AUTH_TOKEN', secretRef: 'twilio-auth-token' }
+            { name: 'TWILIO_FROM', value: twilioFrom }
           ]
           probes: [
             {

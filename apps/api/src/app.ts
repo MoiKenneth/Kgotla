@@ -15,11 +15,13 @@ import { country, publicPack } from './countries/index.js';
 import { many, one, tx } from './db.js';
 import { verifyAuditChain } from './lib/audit.js';
 import { citizenOf, createSession, officerOf, PinError, resolvePrincipal } from './lib/auth.js';
-import { hashIdentifier, verifySecret } from './lib/crypto.js';
+import { hashIdentifier, hashSecret, randomToken, verifySecret } from './lib/crypto.js';
+import { audit } from './lib/audit.js';
 import { AppError, badRequest, forbidden, notFound, unauthorized } from './lib/errors.js';
 import { fmt } from './lib/money.js';
 import { dateLabel } from './lib/time.js';
-import { ACTION_TYPES, cancelAction, confirmAction, createAction, getAction, MockVending, recentActions, type ActionCtx, type Vending } from './modules/actions.js';
+import { ACTION_TYPES, cancelAction, confirmAction, createAction, executeAction, getAction, MockVending, recentActions, type ActionCtx, type Vending } from './modules/actions.js';
+import { completePayment, configuredGateways, decideTestPayment, methodsView, myPayments, reconcilePayments, startPayment, startSchema, testPaymentInfo, type Gateway } from './modules/payments.js';
 import { assistantReply, contacts, type LlmClient } from './modules/assistant.js';
 import { advanceApplication, listApplications, rejectApplication } from './modules/gov.js';
 import {
@@ -53,6 +55,8 @@ export interface AppDeps {
   vending?: Vending;
   llm?: LlmClient | null;
   regulator?: RegulatorRegistry;
+  /** Payment gateways (PayPal, DPO, test). Default: whatever this cell is configured for. */
+  gateways?: Gateway[];
   logger?: boolean;
 }
 
@@ -71,6 +75,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const liveness = deps.liveness ?? new MockLiveness();
   const ctx: ActionCtx = { registry, vending: deps.vending ?? new MockVending() };
   const llm = deps.llm === undefined ? null : deps.llm;
+  const gateways = deps.gateways ?? configuredGateways(pool);
+  const runPaid = (citizenId: string, actionId: string, via: string) => executeAction(pool, ctx, citizenId, actionId, via);
 
   const app = Fastify({
     logger: deps.logger ? { level: 'info', redact: ['req.headers.authorization', 'req.headers["x-issuer-key"]'] } : false,
@@ -142,11 +148,28 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     assistant: llm ? 'claude' : 'rules',
     actions: ACTION_TYPES,
     tourism: { parksAgency: parksAgency() },
+    paymentMethods: methodsView(gateways),
+    enrolment: config.registryMode === 'open' ? 'open' : 'registry',
   }));
 
+  // -------------------------------------------------------------------------
+  // Payments in: PayPal, DPO Pay (cards, mobile money), test (demo only)
+  // -------------------------------------------------------------------------
+  app.get('/v1/payments/methods', async () => methodsView(gateways));
+  app.post('/v1/me/payments', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) => startPayment(pool, gateways, citizenOf(req), body(startSchema, req.body)));
+  app.post('/v1/me/payments/:id/complete', async (req) => completePayment(pool, gateways, runPaid, (req.params as any).id, citizenOf(req)));
+  app.get('/v1/me/payments', async (req) => myPayments(pool, citizenOf(req)));
+  app.get('/v1/payments/test/:id', async (req) => testPaymentInfo(pool, (req.params as any).id));
+  app.post('/v1/payments/test/:id/decide', async (req) => decideTestPayment(pool, (req.params as any).id, !!body(z.object({ approve: z.boolean() }), req.body).approve));
+  app.decorate('reconcilePayments', () => reconcilePayments(pool, gateways, runPaid));
+
   app.post('/v1/enrol/start', strict, async (req) => {
-    const b = body(idBody, req.body);
-    return startEnrolment(pool, registry, idOf(b));
+    const b = body(
+      idBody.extend({ firstName: z.string().max(60).optional(), lastName: z.string().max(60).optional(), dob: z.string().max(10).optional(), phone: z.string().max(20).optional(), district: z.string().max(60).optional() }),
+      req.body,
+    );
+    const declared = b.firstName || b.phone ? { firstName: b.firstName ?? '', lastName: b.lastName ?? '', dob: b.dob ?? '', phone: b.phone ?? '', district: b.district ?? '' } : undefined;
+    return startEnrolment(pool, registry, idOf(b), declared);
   });
   app.post('/v1/enrol/:id/otp', strict, async (req) => {
     const b = body(z.object({ code: z.string() }), req.body);
@@ -390,6 +413,30 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const r = await tx(pool, (c) => callNext(c, (req.params as any).locationId, b.counter, `officer:${p.id}`));
     return r ?? { empty: true };
   });
+  // Staff accounts (admins only). The password is shown once; the officer gets it in person.
+  app.get('/v1/officer/officers', async (req) => {
+    const p = officerOf(req, ['admin']);
+    if (p.role !== 'admin') throw forbidden();
+    return many<any>(pool, 'SELECT id, username, name, agency, role, created_at FROM officers ORDER BY agency, username');
+  });
+  app.post('/v1/officer/officers', async (req, reply) => {
+    const p = officerOf(req, ['admin']);
+    if (p.role !== 'admin') throw forbidden();
+    const b = body(z.object({ username: z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{3,40}$/, 'Usernames use 3 to 40 lowercase letters, digits, dots or dashes'), name: z.string().trim().min(2).max(80), agency: z.string().trim().toUpperCase().regex(/^[A-Z0-9]{2,12}$/), role: z.enum(['caseworker', 'counter', 'admin']) }), req.body);
+    const password = randomToken(12);
+    try {
+      const r = await tx(pool, async (c) => {
+        const o = await one<any>(c, 'INSERT INTO officers (username, name, agency, role, password_hash) VALUES ($1,$2,$3,$4,$5) RETURNING id', [b.username, b.name, b.agency, b.role, await hashSecret(password)]);
+        await audit(c, `officer:${p.id}`, 'officer.created', `officer:${o.id}`, { username: b.username, agency: b.agency, role: b.role });
+        return o;
+      });
+      return reply.status(201).send({ id: r.id, username: b.username, password });
+    } catch (e: any) {
+      if (e?.code === '23505') throw new AppError(409, 'taken', 'That username is taken');
+      throw e;
+    }
+  });
+
   app.get('/v1/officer/overview', async (req) => {
     const p = officerOf(req, ['admin']);
     if (p.role !== 'admin') throw forbidden();

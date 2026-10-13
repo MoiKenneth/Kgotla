@@ -37,6 +37,33 @@ export class MemorySms implements SmsGateway {
   }
 }
 
+/**
+ * Twilio Programmable Messaging. Works for numbers in all five countries.
+ * Swap for a local aggregator (for example Africa's Talking, or an operator's
+ * bulk SMS API) by implementing SmsGateway the same way.
+ */
+export class TwilioSms implements SmsGateway {
+  constructor(
+    private opts: { accountSid: string; authToken: string; from?: string; messagingServiceSid?: string },
+    private fetchImpl: typeof fetch = fetch,
+  ) {}
+  async send(to: string, text: string) {
+    const form = new URLSearchParams({ To: to, Body: text });
+    if (this.opts.messagingServiceSid) form.set('MessagingServiceSid', this.opts.messagingServiceSid);
+    else form.set('From', this.opts.from ?? '');
+    const r = await this.fetchImpl(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(this.opts.accountSid)}/Messages.json`, {
+      method: 'POST',
+      headers: { authorization: 'Basic ' + Buffer.from(`${this.opts.accountSid}:${this.opts.authToken}`).toString('base64'), 'content-type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) {
+      const j: any = await r.json().catch(() => ({}));
+      throw new Error(`Twilio ${r.status}${j.code ? ` ${j.code}` : ''}: ${j.message ?? 'send failed'}`);
+    }
+  }
+}
+
 /** Deliver pending outbox rows. Safe to run from several workers (SKIP LOCKED). */
 export async function processOutbox(pool: pg.Pool, sms: SmsGateway, batch = 50): Promise<number> {
   const c = await pool.connect();

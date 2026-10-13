@@ -58,6 +58,18 @@ export async function seedReference(pool: pg.Pool, log = console.log): Promise<v
   });
 }
 
+/**
+ * Live cells: create the first Kgotla admin from ADMIN_BOOTSTRAP_PASSWORD (kept in
+ * Key Vault) if no admin exists yet. The admin then creates other officer accounts.
+ */
+export async function seedAdmin(pool: pg.Pool, log = console.log): Promise<void> {
+  const pw = process.env.ADMIN_BOOTSTRAP_PASSWORD;
+  if (!pw || pw === 'unset' || pw.length < 12) return;
+  if (await one(pool, `SELECT 1 FROM officers WHERE role = 'admin'`)) return;
+  await pool.query(`INSERT INTO officers (username, name, agency, role, password_hash) VALUES ('admin', 'Kgotla administrator', 'KGOTLA', 'admin', $1)`, [await hashSecret(pw)]);
+  log('created the first admin account "admin" (password from ADMIN_BOOTSTRAP_PASSWORD)');
+}
+
 /** Password for demo officer accounts: from the environment (cloud cells), else a well-known demo value. */
 export const demoOfficerPassword = () => process.env.DEMO_OFFICER_PASSWORD || 'kgotla-demo';
 

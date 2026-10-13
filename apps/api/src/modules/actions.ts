@@ -71,6 +71,14 @@ async function requireFunds(db: Queryable, citizenId: string, thebe: number) {
   if (b < thebe) throw conflict('insufficient_funds', `Your wallet has ${fmt(b)}. You need ${fmt(thebe)}. Top up first.`);
 }
 
+/** Government services that act on someone's legal identity need a registry-verified account (level 3). */
+async function requireVerified(db: Queryable, citizenId: string) {
+  const c = await one<any>(db, 'SELECT loa FROM citizens WHERE id = $1', [citizenId]);
+  if (!c || c.loa < 3) {
+    throw new AppError(403, 'verification_required', `This service needs your identity verified with the ${country().agencies.civil.name}. Your account is level ${c?.loa ?? 0}: visit a Kgotla verification point with your ${country().nationalId.short} to upgrade.`);
+  }
+}
+
 const sourceName = (id: string) => country().topUpSources.find((s) => s.id === id)?.name ?? id;
 
 async function citizenName(db: Queryable, id: string) {
@@ -194,6 +202,9 @@ const defs: Record<string, Def<any>> = {
     requiresPin: true,
     schema: z.object({ source: oneOf(() => country().topUpSources.map((s) => s.id), 'top-up source'), amount }),
     async prepare(_db, _ctx, _citizenId, p) {
+      // The mobile-money transfers here are simulated until each operator's collection API is connected.
+      // In a live cell, money comes in only through a real gateway (PayPal, DPO Pay): see /v1/me/payments.
+      if (!config.demoMode) throw badRequest('use_payment_gateway', 'Top up with PayPal, a card or mobile money');
       if (p.amount > country().limits.topUpMax) throw badRequest('limit', `The top-up limit is ${fmt(country().limits.topUpMax)}`);
       const name = sourceName(p.source);
       return {
@@ -226,6 +237,7 @@ const defs: Record<string, Def<any>> = {
     requiresPin: true,
     schema: z.object({ eyeTest: z.object({ locationId: z.string(), startsAt: z.string() }) }),
     async prepare(db, ctx, citizenId, p) {
+      await requireVerified(db, citizenId);
       const t = await getTemplate(db, 'driver_licence_renewal');
       const lic = await one<any>(db, `SELECT data, valid_to FROM documents WHERE citizen_id = $1 AND type = 'driver_licence' AND status = 'valid'`, [citizenId]);
       if (!lic) throw badRequest('no_licence', `You have no driver's licence on record. Visit ${country().agencies.licence.code} to apply for a first licence.`);
@@ -258,6 +270,7 @@ const defs: Record<string, Def<any>> = {
     requiresPin: true,
     schema: z.object({}).passthrough(),
     async prepare(db, _ctx, citizenId) {
+      await requireVerified(db, citizenId);
       const t = await getTemplate(db, 'birth_certificate_copy');
       await requireFunds(db, citizenId, t.fee);
       const me = await citizenName(db, citizenId);
@@ -278,6 +291,7 @@ const defs: Record<string, Def<any>> = {
     requiresPin: false,
     schema: z.object({}).passthrough(),
     async prepare(db, ctx, citizenId) {
+      await requireVerified(db, citizenId);
       const t = await getTemplate(db, 'tax_clearance');
       const tax = country().agencies.tax.code;
       const c = await one<any>(db, 'SELECT omang_hash FROM citizens WHERE id = $1', [citizenId]);
@@ -460,6 +474,18 @@ export async function confirmAction(pool: pg.Pool, ctx: ActionCtx, citizenId: st
     if (!pin) throw new AppError(401, 'pin_required', 'Enter your PIN to confirm');
     await verifyPin(pool, citizenId, pin);
   }
+  return executeAction(pool, ctx, citizenId, actionId, d.requiresPin ? 'pin' : 'tap');
+}
+
+/**
+ * Run an action the citizen has authorised: with their PIN (confirmAction), or by
+ * approving a payment for it at PayPal or DPO Pay (confirmedWith = provider).
+ * The row lock makes a double tap, a retry or a late payment callback execute at most once.
+ */
+export async function executeAction(pool: pg.Pool, ctx: ActionCtx, citizenId: string, actionId: string, confirmedWith: string) {
+  const d0 = await one<any>(pool, 'SELECT type FROM pending_actions WHERE id = $1 AND citizen_id = $2', [actionId, citizenId]);
+  if (!d0) throw notFound('Action not found');
+  const d = defs[d0.type];
   try {
     const done = await tx(pool, async (c) => {
       const row = await one<any>(c, 'SELECT * FROM pending_actions WHERE id = $1 FOR UPDATE', [actionId]);
@@ -473,7 +499,7 @@ export async function confirmAction(pool: pg.Pool, ctx: ActionCtx, citizenId: st
       await audit(c, row.source === 'assistant' ? `assistant:${citizenId}` : `citizen:${citizenId}`, `action.${row.type}`, `action:${actionId}`, {
         source: row.source,
         amount: row.amount,
-        confirmedWith: d.requiresPin ? 'pin' : 'tap',
+        confirmedWith,
       });
       return one<any>(c, `UPDATE pending_actions SET status = 'done', result = $2, decided_at = now() WHERE id = $1 RETURNING *`, [actionId, JSON.stringify(result)]);
     });

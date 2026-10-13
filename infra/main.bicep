@@ -40,6 +40,19 @@ param deployerObjectId string = ''
 @maxValue(10)
 param minReplicas int = 0
 
+@description('PayPal environment for every cell: sandbox (test money) or live (real money).')
+@allowed(['sandbox', 'live'])
+param paypalEnv string = 'sandbox'
+
+@description('Local currency per 1 USD for PayPal charges, for example 13.6 for BWP. Empty uses a rough built-in default.')
+param paypalFxRate string = ''
+
+@description('DPO Pay service type number (from the DPO merchant account). Empty turns DPO off.')
+param dpoServiceType string = ''
+
+@description('Twilio sender (phone number like +1555... or an approved alphanumeric id). Empty: SMS is only logged.')
+param twilioFrom string = ''
+
 @description('Tags on every resource.')
 param tags object = {
   app: 'kgotla'
@@ -88,6 +101,10 @@ module cellMods 'modules/cell.bicep' = [for (code, i) in cells: {
     image: deployApps ? '${shared.outputs.registryServer}/kgotla:${imageTag}' : ''
     demoMode: demoMode
     minReplicas: minReplicas
+    paypalEnv: paypalEnv
+    paypalFxRate: paypalFxRate
+    dpoServiceType: dpoServiceType
+    twilioFrom: twilioFrom
   }
 }]
 

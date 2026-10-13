@@ -475,8 +475,8 @@ export async function partnerIdentity(db: Queryable, partnerId: string, subject:
       district: c.district,
       phone_number: c.phone,
       assurance_level: c.loa,
-      id_verified: true,
-      id_verified_by: `${country().agencies.civil.name} register, face match at enrolment`,
+      id_verified: c.loa >= 3,
+      id_verified_by: c.loa >= 3 ? `${country().agencies.civil.name} register, face match at enrolment` : 'Not verified: phone number proven by SMS, identity details declared by the person',
       enrolled_at: c.created_at,
     });
   }

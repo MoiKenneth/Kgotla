@@ -7,7 +7,13 @@
 # Optional repository variables (Settings > Secrets and variables > Actions > Variables):
 #   KGOTLA_CELLS    JSON list of cells to run, default ["BW"]. Example: ["BW","ZA","NA","ZM","ZW"]
 #   AZURE_LOCATION  Azure region, default southafricanorth
-# Optional secret: ANTHROPIC_API_KEY turns on the Claude assistant in every cell.
+#   KGOTLA_MODE     demo (default: example people and money) or live (real sign-ups and money)
+#   PAYPAL_ENV      sandbox (default) or live
+#   PAYPAL_FX_RATE  local currency per 1 USD for PayPal, e.g. 13.6
+#   DPO_SERVICE_TYPE  service type number from your DPO Pay account
+#   TWILIO_FROM     SMS sender (phone number or approved sender id)
+# Optional secrets: ANTHROPIC_API_KEY (Claude assistant), PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET,
+# DPO_COMPANY_TOKEN, TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN. Each is copied into every cell's Key Vault.
 name: Deploy to Azure
 
 on:
@@ -62,6 +68,12 @@ jobs:
       LOCATION: ${{ vars.AZURE_LOCATION || 'southafricanorth' }}
       CELLS: ${{ inputs.cells || vars.KGOTLA_CELLS || '["BW"]' }}
       TAG: ${{ github.sha }}
+      DEMO: ${{ vars.KGOTLA_MODE == 'live' && 'false' || 'true' }}
+      APP_PARAMS: >-
+        paypalEnv=${{ vars.PAYPAL_ENV || 'sandbox' }}
+        paypalFxRate=${{ vars.PAYPAL_FX_RATE || '' }}
+        dpoServiceType=${{ vars.DPO_SERVICE_TYPE || '' }}
+        twilioFrom=${{ vars.TWILIO_FROM || '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -90,7 +102,7 @@ jobs:
             --location "$LOCATION" \
             --template-file infra/main.bicep \
             --parameters infra/main.parameters.json \
-            --parameters location="$LOCATION" cells="$CELLS" deployApps=false deployerObjectId="$DEPLOYER_OID" \
+            --parameters location="$LOCATION" cells="$CELLS" deployApps=false deployerObjectId="$DEPLOYER_OID" demoMode="$DEMO" $APP_PARAMS \
             --query properties.outputs -o json > pass1.json
           jq . pass1.json
           echo "ACR=$(jq -r .registryName.value pass1.json)" >> "$GITHUB_ENV"
@@ -98,6 +110,11 @@ jobs:
       - name: Put cell secrets in Key Vault (generated once, never in git)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PAYPAL_CLIENT_ID: ${{ secrets.PAYPAL_CLIENT_ID }}
+          PAYPAL_CLIENT_SECRET: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          DPO_COMPANY_TOKEN: ${{ secrets.DPO_COMPANY_TOKEN }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
         run: |
           set -euo pipefail
           # Role assignments can take a few minutes to reach Key Vault.
@@ -108,22 +125,31 @@ jobs:
             done
             echo "::error::No access to Key Vault $1"; return 1
           }
-          ensure() { # vault name value-if-missing
+          ensure() { # vault name value-if-missing: generated once, then kept
             if ! az keyvault secret show --vault-name "$1" --name "$2" -o none 2>/dev/null; then
               az keyvault secret set --vault-name "$1" --name "$2" --value "$3" -o none
               echo "Created $2 in $1"
+            fi
+          }
+          sync() { # vault name value: copy a GitHub secret in when given, else make sure the name exists ("unset" = off)
+            if [ -n "$3" ]; then
+              current=$(az keyvault secret show --vault-name "$1" --name "$2" --query value -o tsv 2>/dev/null || true)
+              [ "$current" = "$3" ] || { az keyvault secret set --vault-name "$1" --name "$2" --value "$3" -o none; echo "Updated $2 in $1"; }
+            else
+              ensure "$1" "$2" unset
             fi
           }
           for kv in $(jq -r '.cells.value[].keyVaultName' pass1.json); do
             wait_for_vault "$kv"
             ensure "$kv" kgotla-secret "$(openssl rand -base64 48 | tr -d '\n')"
             ensure "$kv" demo-officer-password "$(openssl rand -base64 18 | tr -d '/+=\n')"
-            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
-              current=$(az keyvault secret show --vault-name "$kv" --name anthropic-api-key --query value -o tsv 2>/dev/null || true)
-              [ "$current" = "$ANTHROPIC_API_KEY" ] || az keyvault secret set --vault-name "$kv" --name anthropic-api-key --value "$ANTHROPIC_API_KEY" -o none
-            else
-              ensure "$kv" anthropic-api-key unset
-            fi
+            ensure "$kv" admin-bootstrap-password "$(openssl rand -base64 18 | tr -d '/+=\n')"
+            sync "$kv" anthropic-api-key "${ANTHROPIC_API_KEY:-}"
+            sync "$kv" paypal-client-id "${PAYPAL_CLIENT_ID:-}"
+            sync "$kv" paypal-client-secret "${PAYPAL_CLIENT_SECRET:-}"
+            sync "$kv" dpo-company-token "${DPO_COMPANY_TOKEN:-}"
+            sync "$kv" twilio-account-sid "${TWILIO_ACCOUNT_SID:-}"
+            sync "$kv" twilio-auth-token "${TWILIO_AUTH_TOKEN:-}"
           done
 
       - name: Build and push the image
@@ -142,7 +168,7 @@ jobs:
             --location "$LOCATION" \
             --template-file infra/main.bicep \
             --parameters infra/main.parameters.json \
-            --parameters location="$LOCATION" cells="$CELLS" deployApps=true imageTag="$TAG" deployerObjectId="$DEPLOYER_OID" \
+            --parameters location="$LOCATION" cells="$CELLS" deployApps=true imageTag="$TAG" deployerObjectId="$DEPLOYER_OID" demoMode="$DEMO" $APP_PARAMS \
             --query properties.outputs -o json > pass2.json
 
       - name: Smoke test each cell
@@ -159,6 +185,7 @@ jobs:
             [ -n "$ok" ] || { echo "::error::$code did not become healthy at $url"; exit 1; }
             got=$(curl -fsS "$url/v1/config" | jq -r .country)
             [ "$got" = "$code" ] || { echo "::error::$url reports country $got, expected $code"; exit 1; }
-            echo "- **$code**: $url (citizen app), $url/officer.html, $url/verify.html, $url/ussd.html" >> "$GITHUB_STEP_SUMMARY"
+            mode=$(curl -fsS "$url/v1/config" | jq -r 'if .demoMode then "demo" else "live" end + " · payments: " + ([.paymentMethods[].name] | join(", ") | if . == "" then "none yet" else . end)')
+            echo "- **$code** ($mode): $url (citizen app), $url/officer.html, $url/partners.html, $url/verify.html" >> "$GITHUB_STEP_SUMMARY"
             echo "$code is live at $url"
           done

@@ -105,21 +105,45 @@ export function normalisePhone(p: string): string {
 // Enrolment: Omang + SMS OTP + liveness/face match + PIN = assurance level 3
 // ---------------------------------------------------------------------------
 
-export async function startEnrolment(pool: pg.Pool, registry: Registry, idRaw: string) {
+/** Details a person declares when there is no registry link yet (open sign-up). */
+export interface Declared { firstName: string; lastName: string; dob: string; phone: string; district: string }
+
+function declaredPerson(omang: string, d: Declared): RegistryPerson {
+  const name = (s: string) => s.trim().replace(/\s+/g, ' ');
+  if (!name(d.firstName) || !name(d.lastName)) throw badRequest('name_required', 'Enter your first name and surname as they appear on your ID');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d.dob) || isNaN(Date.parse(d.dob))) throw badRequest('invalid_dob', 'Enter your date of birth');
+  const age = (Date.now() - Date.parse(d.dob)) / (365.25 * 86400_000);
+  if (age < 16 || age > 120) throw badRequest('invalid_dob', 'You must be 16 or older to open a Kgotla account');
+  return {
+    omang, firstName: name(d.firstName), lastName: name(d.lastName), dob: d.dob, sex: 'F', district: name(d.district || '') || country().name,
+    phone: normalisePhone(d.phone), licenceClass: null, licenceValidTo: null, taxCompliant: false,
+  };
+}
+
+/**
+ * Start sign-up. With a registry link (or the demo registry) the details come from
+ * the registry; in open mode the person declares them and proves their phone.
+ */
+export async function startEnrolment(pool: pg.Pool, registry: Registry, idRaw: string, declared?: Declared) {
   const omang = nationalId(idRaw);
   const idName = country().nationalId.name;
-  const person = await registry.lookup(omang);
+  const open = config.registryMode === 'open';
+  if (open && !declared) throw badRequest('details_required', 'Enter your name, date of birth and mobile number');
+  const person = open ? declaredPerson(omang, declared!) : await registry.lookup(omang);
   if (!person) throw notFound(`We could not find that ${idName} in the national registry. Check it and try again.`);
   const omangHash = hashIdentifier(omang);
   if (await one(pool, 'SELECT 1 FROM citizens WHERE omang_hash = $1', [omangHash])) {
     throw conflict('already_enrolled', `This ${idName} already has a Kgotla account. Sign in with your PIN.`);
   }
+  if (open && (await one(pool, 'SELECT 1 FROM citizens WHERE phone = $1', [person.phone]))) {
+    throw conflict('phone_in_use', 'That mobile number already belongs to a Kgotla account');
+  }
   const code = otp();
   const e = await tx(pool, async (c) => {
     const row = await one<any>(
       c,
-      `INSERT INTO enrolments (omang_hash, omang, otp_hash, expires_at) VALUES ($1,$2,$3, now() + interval '20 minutes') RETURNING id`,
-      [omangHash, omang, hashToken(code)],
+      `INSERT INTO enrolments (omang_hash, omang, otp_hash, expires_at, declared) VALUES ($1,$2,$3, now() + interval '20 minutes', $4) RETURNING id`,
+      [omangHash, omang, hashToken(code), open ? JSON.stringify(person) : null],
     );
     await enqueue(c, 'sms.phone', { phone: person.phone, text: `Kgotla code: ${code}. Never share it. Valid 20 minutes.` });
     return row;
@@ -158,9 +182,11 @@ export async function enrolmentLiveness(pool: pg.Pool, liveness: Liveness, id: s
     const e = await liveEnrolment(c, id);
     if (!e.otp_verified) throw badRequest('otp_required', 'Confirm the SMS code first');
     const r = await liveness.check(img, e.omang);
-    await c.query('UPDATE enrolments SET liveness_score = $2, face_match = $3 WHERE id = $1', [id, r.liveness, r.match]);
+    // Open sign-up has no registry photo to match against: only liveness counts, and the account gets assurance level 2.
+    const match = e.declared ? 1 : r.match;
+    await c.query('UPDATE enrolments SET liveness_score = $2, face_match = $3 WHERE id = $1', [id, r.liveness, match]);
     // The selfie itself is never stored.
-    return { passed: r.liveness >= LIVENESS_MIN && r.match >= MATCH_MIN, match: r.match };
+    return { passed: r.liveness >= LIVENESS_MIN && match >= MATCH_MIN, match };
   });
 }
 
@@ -180,18 +206,26 @@ export async function completeEnrolment(
     const e = await liveEnrolment(c, id);
     if (!e.otp_verified) throw badRequest('otp_required', 'Confirm the SMS code first');
     if (!(e.liveness_score >= LIVENESS_MIN && e.face_match >= MATCH_MIN)) throw badRequest('liveness_required', 'Complete the face check first');
-    const p = await registry.lookup(e.omang);
+    const p: RegistryPerson | null = e.declared ?? (await registry.lookup(e.omang));
     if (!p) throw notFound('Registry record not found');
-    const citizen = await one<any>(
-      c,
-      `INSERT INTO citizens (omang_hash, omang_last4, first_name, last_name, dob, district, phone, loa, pin_hash, lang)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,3,$8,$9) RETURNING id`,
-      [e.omang_hash, e.omang.replace(/\W/g, '').slice(-4), p.firstName, p.lastName, p.dob, p.district, p.phone, pinHash, supportedLang(input.lang)],
-    );
+    // Level 3: registry match + face match. Level 2: phone proven, identity declared (open sign-up).
+    const loa = e.declared ? 2 : 3;
+    let citizen: any;
+    try {
+      citizen = await one<any>(
+        c,
+        `INSERT INTO citizens (omang_hash, omang_last4, first_name, last_name, dob, district, phone, loa, pin_hash, lang)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+        [e.omang_hash, e.omang.replace(/\W/g, '').slice(-4), p.firstName, p.lastName, p.dob, p.district, p.phone, loa, pinHash, supportedLang(input.lang)],
+      );
+    } catch (x: any) {
+      if (x?.code === '23505') throw conflict('already_enrolled', 'This ID or mobile number already has a Kgotla account. Sign in with your PIN.');
+      throw x;
+    }
     // Clear the raw Omang from the enrolment record.
     await c.query(`UPDATE enrolments SET completed_at = now(), omang = '' WHERE id = $1`, [id]);
-    await provisionCitizen(c, citizen.id, p);
-    await audit(c, `citizen:${citizen.id}`, 'citizen.enrolled', `citizen:${citizen.id}`, { loa: 3, match: e.face_match });
+    await provisionCitizen(c, citizen.id, p, { verified: loa === 3 });
+    await audit(c, `citizen:${citizen.id}`, 'citizen.enrolled', `citizen:${citizen.id}`, { loa, match: e.face_match, mode: e.declared ? 'open' : 'registry' });
     const s = await createSession(c, 'citizen', citizen.id, input.deviceLabel);
     return { citizenId: citizen.id as string, token: s.token, expiresAt: s.expiresAt };
   });
@@ -204,10 +238,11 @@ export function supportedLang(lang?: string): string {
 }
 
 /** Wallet, national ID credential and registry-held documents for a new citizen. */
-export async function provisionCitizen(db: Queryable, citizenId: string, p: RegistryPerson) {
+export async function provisionCitizen(db: Queryable, citizenId: string, p: RegistryPerson, opts: { verified?: boolean } = {}) {
   const pack = country();
   await ensureWallet(db, citizenId, `${p.firstName} ${p.lastName}`);
-  await issueDocument(db, citizenId, {
+  // Only a registry-verified identity gets the national ID credential in the Vault.
+  if (opts.verified !== false) await issueDocument(db, citizenId, {
     type: 'omang',
     title: pack.nationalId.documentTitle,
     issuerId: pack.agencies.civil.code,

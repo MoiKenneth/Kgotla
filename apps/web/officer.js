@@ -30,10 +30,10 @@
     }
     $('who').textContent = `${S.me.name} · ${S.me.agency} · ${S.me.role}`;
     const parks = S.cfg && S.cfg.tourism ? S.cfg.tourism.parksAgency.code : null;
-    const tabs = S.me.role === 'admin' ? ['overview', 'partners', 'directory', 'permits', 'applications', 'queue'] : S.me.agency === parks ? ['permits'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
+    const tabs = S.me.role === 'admin' ? ['overview', 'partners', 'directory', 'permits', 'staff', 'applications', 'queue'] : S.me.agency === parks ? ['permits'] : S.me.role === 'caseworker' ? ['applications'] : ['queue'];
     if (!tabs.includes(S.tab)) S.tab = tabs[0];
-    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', partners: 'Partners', directory: 'Directory', permits: 'Park permits', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
-    ({ overview, partners, directory, permits, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
+    main.innerHTML = `<div class="tabs">${tabs.map((x) => `<button data-tab="${x}" aria-pressed="${S.tab === x}">${{ overview: 'Overview', partners: 'Partners', directory: 'Directory', permits: 'Parks', staff: 'Staff', applications: 'Applications', queue: 'Smart queue' }[x]}</button>`).join('')}</div><div id="pane"><div class="panel">Loading…</div></div>`;
+    ({ overview, partners, directory, permits, staff, applications, queue })[S.tab]().catch((e) => { $('pane').innerHTML = `<div class="panel"><p class="err">${esc(e.message)}</p></div>`; });
   }
 
   async function overview() {
@@ -95,12 +95,30 @@
 
   async function permits() {
     S.pdate = S.pdate || new Date(Date.now() + ((S.cfg && S.cfg.pack ? S.cfg.pack.utcOffsetMinutes : 120) * 6e4)).toISOString().slice(0, 10);
-    const r = await api('GET', `/v1/officer/park-permits?date=${S.pdate}`);
+    const [r, parks] = await Promise.all([api('GET', `/v1/officer/park-permits?date=${S.pdate}`), api('GET', '/v1/officer/parks')]);
     $('pane').innerHTML = `<div class="panel"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">Park permits · ${esc(r.agency.name)}</h2>
       <input type="date" id="pdate" value="${esc(r.date)}" aria-label="Date"></div>
       <p class="hint" style="margin-bottom:10px">Check the visitor's ID card against the name and last 4 characters, then check them in. The permit is also in the visitor's Vault, and they can show it with a share link.</p>
       ${r.permits.length ? `<div class="tbl"><table><thead><tr><th>Permit</th><th>Park</th><th>Holder</th><th>People</th><th>Rate</th><th>Dates</th><th></th></tr></thead><tbody>${r.permits.map((x) => `<tr><td class="mono">${esc(x.ref)}</td><td>${esc(x.park)}</td><td>${esc(x.holder)}<br><span class="hint mono">${esc(idShort())} ***${esc(x.idLast4)}</span></td><td>${x.people}</td><td>${esc(x.rate)}</td><td>${esc(x.when)}</td>
-        <td>${x.status === 'confirmed' ? `<button class="btn sky" data-checkin="${x.id}">Check in</button>` : '<span class="chip good">CHECKED IN</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No permits for this day.</p>'}</div>`;
+        <td>${x.status === 'confirmed' ? `<button class="btn sky" data-checkin="${x.id}">Check in</button>` : '<span class="chip good">CHECKED IN</span>'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">No permits for this day.</p>'}</div>
+      <div class="panel"><h2>Park fees and booking</h2>
+      <p class="hint" style="margin-bottom:10px">Enter the official entry fees per person per day, then open the park for booking in Kgotla. In a live cell every park starts closed until its fees are confirmed here.</p>
+      <div class="tbl"><table><thead><tr><th>Park</th>${(parks[0] ? parks[0].rates : []).map((r) => `<th>${esc(r.label)}</th>`).join('')}<th>Permits per day</th><th>Open</th><th></th></tr></thead><tbody>
+      ${parks.map((p) => `<tr data-park="${esc(p.id)}"><td>${esc(p.name)}<br><span class="hint">${esc(p.region)}</span></td>${p.rates.map((r) => `<td><input class="mono" style="width:90px" data-rate="${esc(r.key)}" value="${(r.price / 100).toFixed(2)}" inputmode="decimal" aria-label="${esc(r.label)}"></td>`).join('')}
+        <td><input class="mono" style="width:80px" data-cap value="${p.capacity}" inputmode="numeric" aria-label="Permits per day"></td><td><input type="checkbox" data-active ${p.active ? 'checked' : ''} aria-label="Open for booking"></td><td><button class="btn" data-savepark="${esc(p.id)}">Save</button></td></tr>`).join('')}
+      </tbody></table></div><p class="hint" id="parkMsg"></p></div>`;
+  }
+
+  async function staff() {
+    const rows = await api('GET', '/v1/officer/officers');
+    $('pane').innerHTML = `<div class="panel"><h2>Staff accounts</h2>
+      <div class="tbl"><table><thead><tr><th>Username</th><th>Name</th><th>Agency</th><th>Role</th><th>Created</th></tr></thead><tbody>
+      ${rows.map((o) => `<tr><td class="mono">${esc(o.username)}</td><td>${esc(o.name)}</td><td>${esc(o.agency)}</td><td>${esc(o.role)}</td><td class="mono">${esc(fdt(o.created_at))}</td></tr>`).join('')}</tbody></table></div></div>
+      <form class="panel" id="staffForm" style="display:grid;gap:10px"><h2>Add a staff member</h2>
+        <p class="hint">Case workers handle applications for their agency, counter staff run queues and park gates, admins see everything. ${S.cfg && S.cfg.tourism ? `Park gate staff use agency <span class="mono">${esc(S.cfg.tourism.parksAgency.code)}</span> and role counter.` : ''}</p>
+        <div class="row"><input id="sUser" placeholder="username, e.g. gate.kasane" required class="mono"><input id="sName" placeholder="Full name" required style="flex:1;min-width:200px">
+        <input id="sAgency" placeholder="Agency code" required class="mono" style="width:130px"><select id="sRole"><option>counter</option><option>caseworker</option><option>admin</option></select></div>
+        <div class="row"><button class="btn sky">Create account</button><span id="staffMsg" class="hint"></span></div></form>`;
   }
 
   async function applications() {
@@ -137,6 +155,13 @@
       if (el.dataset.tab) { S.tab = el.dataset.tab; render(); }
       else if (el.dataset.status) { S.status = el.dataset.status; render(); }
       else if (el.dataset.pstatus) { S.pstatus = el.dataset.pstatus; render(); }
+      else if (el.dataset.savepark) {
+        const row = el.closest('tr');
+        const rates = [...row.querySelectorAll('[data-rate]')].map((i) => ({ key: i.dataset.rate, price: i.value.trim() }));
+        el.disabled = true;
+        await api('PUT', `/v1/officer/parks/${el.dataset.savepark}`, { active: row.querySelector('[data-active]').checked, capacity: Number(row.querySelector('[data-cap]').value), rates });
+        await permits(); $('parkMsg').textContent = 'Saved.';
+      }
       else if (el.dataset.checkin) { el.disabled = true; await api('POST', `/v1/officer/park-permits/${el.dataset.checkin}/check-in`); await permits(); }
       else if (el.dataset.dirdel) { el.disabled = true; await api('DELETE', `/v1/officer/directory/${el.dataset.dirdel}`); await directory(); }
       else if (el.dataset.approve) {
@@ -165,6 +190,15 @@
     }
   });
   document.addEventListener('submit', async (e) => {
+    if (e.target.id === 'staffForm') {
+      e.preventDefault();
+      try {
+        const r = await api('POST', '/v1/officer/officers', { username: $('sUser').value.trim(), name: $('sName').value.trim(), agency: $('sAgency').value.trim(), role: $('sRole').value });
+        await staff();
+        $('staffMsg').innerHTML = `Created <b class="mono">${esc(r.username)}</b>. One-time password: <b class="mono">${esc(r.password)}</b>. Give it to them in person; it is not shown again.`;
+      } catch (x) { $('staffMsg').textContent = x.message; }
+      return;
+    }
     if (e.target.id === 'dirForm') {
       e.preventDefault();
       try {

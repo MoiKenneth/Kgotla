@@ -31,7 +31,7 @@ describe('tourism', () => {
   it('lists parks, stays and safaris without signing in', async () => {
     const all = await call(h.app, null, 'GET', '/v1/tourism/listings');
     const kinds = new Set(all.json.listings.map((l: any) => l.kind));
-    expect(kinds).toEqual(new Set(['park', 'stay', 'safari']));
+    expect(kinds).toEqual(new Set(['park', 'reserve', 'stay', 'safari', 'driver']));
     const chobe = all.json.listings.find((l: any) => l.id === 'park-chobe');
     expect(chobe.provider).toBe('Department of Wildlife and National Parks');
     expect(chobe.fromText).toBe('P 10.00');
@@ -84,6 +84,44 @@ describe('tourism', () => {
     expect(a.json.amountText).toBe('P 6,800.00'); // 2 children x P3,400, 3 days regardless of "days"
     expect(a.json.readback.find((r: string[]) => r[0] === 'When')[1]).toContain('3 days');
     await call(h.app, naledi, 'POST', `/v1/actions/${a.json.id}/cancel`);
+  });
+
+  it('lodges, game reserves and drivers: categories and per-vehicle pricing', async () => {
+    const lodges = await call(h.app, null, 'GET', '/v1/tourism/listings?kind=stay&category=lodge');
+    expect(lodges.json.listings.map((l: any) => l.id)).toEqual(['letsatsi-lodge-river-rooms']);
+    const guesthouses = await call(h.app, null, 'GET', '/v1/tourism/listings?kind=stay&category=guesthouse');
+    expect(guesthouses.json.listings.map((l: any) => l.category)).toEqual(['guesthouse']);
+    const reserves = await call(h.app, null, 'GET', '/v1/tourism/listings?kind=reserve');
+    expect(reserves.json.listings.map((l: any) => l.provider)).toContain('Tshwene Wildlife Reserve');
+    const drivers = await call(h.app, null, 'GET', '/v1/tourism/listings?kind=driver');
+    expect(drivers.json.listings.map((l: any) => l.category).sort()).toEqual(['driver_guide', 'transfer']);
+
+    // Airport transfer: per vehicle, one way, whatever "days" says.
+    const t = await call(h.app, naledi, 'POST', '/v1/actions', { type: 'book_tourism', params: { listingId: 'motse-drive-airport-transfer', rateKey: 'minibus', startDate: plus(9), days: 5, quantity: 2 } });
+    expect(t.json.amountText).toBe('P 1,200.00');
+    expect(t.json.readback).toContainEqual(['Vehicles', '2 vehicles · Minibus (up to 10 people)']);
+    // Driver-guide: per vehicle per day.
+    const g = await call(h.app, naledi, 'POST', '/v1/actions', { type: 'book_tourism', params: { listingId: 'motse-drive-driver-guide', rateKey: '4x4', startDate: plus(9), days: 3, quantity: 1 } });
+    expect(g.json.amountText).toBe('P 7,500.00');
+    // Game drive: per person.
+    const d = await call(h.app, naledi, 'POST', '/v1/actions', { type: 'book_tourism', params: { listingId: 'tshwene-reserve-game-drive', rateKey: 'adult', startDate: plus(9), quantity: 2 } });
+    expect(d.json.amountText).toBe('P 700.00');
+    const done = await call(h.app, naledi, 'POST', `/v1/actions/${d.json.id}/confirm`, { pin: NALEDI.pin });
+    expect(done.json.result.message).toContain('Booked');
+    const me = await call(h.app, naledi, 'GET', '/v1/me');
+    expect(me.json.documents.find((x: any) => x.type === 'booking_voucher' && x.title.startsWith('Reserve booking'))).toBeTruthy();
+    for (const a of [t, g]) await call(h.app, naledi, 'POST', `/v1/actions/${a.json.id}/cancel`);
+  });
+
+  it('a transfer company publishes trips priced per vehicle', async () => {
+    const tok = (await h.app.inject({ method: 'POST', url: '/v1/oauth/token', payload: { client_id: 'demo-transport', client_secret: 'demo-transport-secret' } })).json().access_token;
+    const r = await call(h.app, tok, 'PUT', '/v1/partner/listings', {
+      key: 'maun-airport', name: 'Maun airport transfer', region: 'Okavango Delta · Maun', description: 'Maun airport to any lodge in town.', unit: 'trip', category: 'transfer',
+      rates: [{ key: 'sedan', label: 'Sedan', price: '200' }], capacity: 3,
+    });
+    expect(r.json).toMatchObject({ kind: 'driver', unit: 'trip', category: 'transfer' });
+    const bad = await call(h.app, tok, 'PUT', '/v1/partner/listings', { key: 'x2', name: 'Bad one', region: 'Maun', description: 'Wrong category here.', category: 'lodge', rates: [{ key: 'a', label: 'A1', price: 1 }], capacity: 1 });
+    expect(bad.json.error.code).toBe('invalid_category');
   });
 
   it('refuses bad input before charging anything', async () => {
@@ -173,6 +211,31 @@ describe('tourism', () => {
     await call(h.app, admin, 'POST', `/v1/officer/partners/${applied.json.partnerId}/suspend`, { note: 'Licence lapsed' });
     const list = await call(h.app, null, 'GET', '/v1/tourism/listings?q=baobab');
     expect(list.json.listings).toHaveLength(0);
+  });
+
+  it('the parks agency sets real fees and opens or closes a park', async () => {
+    const gate = await officerLogin(h.app, 'parks.gate');
+    const parks = await call(h.app, gate, 'GET', '/v1/officer/parks');
+    expect(parks.json.map((p: any) => p.id)).toContain('park-chobe');
+    const u = await call(h.app, gate, 'PUT', '/v1/officer/parks/park-chobe', { active: true, capacity: 300, rates: [{ key: 'citizen', price: '12.50' }] });
+    expect(u.json.rates.find((r: any) => r.key === 'citizen').price).toBe(1250);
+    expect(u.json.capacity).toBe(300);
+    expect((await call(h.app, gate, 'PUT', '/v1/officer/parks/park-chobe', { active: true, rates: [{ key: 'citizen', price: '0' }] })).status).toBe(400);
+    await call(h.app, gate, 'PUT', '/v1/officer/parks/park-moremi', { active: false });
+    const list = await call(h.app, null, 'GET', '/v1/tourism/listings?kind=park');
+    expect(list.json.listings.map((l: any) => l.id)).not.toContain('park-moremi');
+    await call(h.app, gate, 'PUT', '/v1/officer/parks/park-moremi', { active: true });
+  });
+
+  it('admins create staff accounts with a one-time password', async () => {
+    const admin = await officerLogin(h.app, 'admin');
+    const r = await call(h.app, admin, 'POST', '/v1/officer/officers', { username: 'gate.kasane', name: 'Neo Gate', agency: 'dwnp', role: 'counter' });
+    expect(r.status).toBe(201);
+    const login2 = await call(h.app, null, 'POST', '/v1/officer/login', { username: 'gate.kasane', password: r.json.password });
+    expect(login2.json.officer).toMatchObject({ agency: 'DWNP', role: 'counter' });
+    expect((await call(h.app, login2.json.token, 'GET', '/v1/officer/park-permits')).status).toBe(200);
+    expect((await call(h.app, admin, 'POST', '/v1/officer/officers', { username: 'gate.kasane', name: 'Again', agency: 'DWNP', role: 'counter' })).status).toBe(409);
+    expect((await call(h.app, login2.json.token, 'POST', '/v1/officer/officers', { username: 'sneaky', name: 'No', agency: 'DWNP', role: 'admin' })).status).toBe(403);
   });
 
   it('keeps the ledger balanced and the audit chain intact', async () => {

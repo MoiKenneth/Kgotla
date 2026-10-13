@@ -283,3 +283,12 @@ button.row:hover{background:var(--app)}
 .card.listing{gap:6px}
 a.row{color:inherit;text-decoration:none}
 .row .main .chip{justify-self:start;margin-top:4px}
+
+/* The Kgotla mark is a home button */
+button.logo{border:0;background:none;padding:0;cursor:pointer;color:inherit;font:inherit;display:inline-flex;align-items:center;gap:8px}
+.ab .logo.mini{flex:none}
+.center{text-align:center}
+.ob>*{flex-shrink:0}
+.pills.kinds{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.pills.kinds .pill{flex:none;display:inline-flex;gap:6px;align-items:center}
+.pill.sm{padding:5px 10px;font-size:12px}
