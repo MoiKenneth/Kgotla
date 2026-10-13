@@ -2,6 +2,7 @@ import { randomInt } from 'node:crypto';
 import type pg from 'pg';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { biller as packBiller, country, networks, payableBillers } from '../countries/index.js';
 import { many, one, tx, type Queryable } from '../db.js';
 import { audit } from '../lib/audit.js';
 import { verifyPin } from '../lib/auth.js';
@@ -27,7 +28,7 @@ import { book, takeTicket } from './places.js';
 
 export type Source = 'app' | 'assistant' | 'ussd';
 
-/** A vendor that sells prepaid electricity tokens / airtime. Production: BPC and MNO vending APIs. */
+/** A vendor that sells prepaid electricity tokens / airtime. Production: the utility's and operators' vending APIs. */
 export interface Vending {
   electricityToken(meter: string, thebe: number): Promise<string>;
   airtime(network: string, phone: string, thebe: number): Promise<void>;
@@ -59,11 +60,16 @@ interface Def<P> {
 }
 
 const amount = z.union([z.string(), z.number()]).transform((v) => toThebe(v));
+/** A string that must be one of this cell's ids (billers, networks, sources). */
+const oneOf = (ids: () => string[], what: string) =>
+  z.string().refine((v) => ids().includes(v), (v) => ({ message: `Unknown ${what} "${v}". Choose one of: ${ids().join(', ')}` }));
 
 async function requireFunds(db: Queryable, citizenId: string, thebe: number) {
   const b = await walletBalance(db, citizenId);
   if (b < thebe) throw conflict('insufficient_funds', `Your wallet has ${fmt(b)}. You need ${fmt(thebe)}. Top up first.`);
 }
+
+const sourceName = (id: string) => country().topUpSources.find((s) => s.id === id)?.name ?? id;
 
 async function citizenName(db: Queryable, id: string) {
   const c = await one<any>(db, 'SELECT first_name, last_name, phone FROM citizens WHERE id = $1', [id]);
@@ -80,7 +86,7 @@ const defs: Record<string, Def<any>> = {
       else rec = await one<any>(db, 'SELECT id, first_name, last_name, phone FROM citizens WHERE phone = $1', [normalisePhone(p.to)]);
       if (!rec) throw notFound('No Kgotla wallet uses that number. Ask them to register, or check the number.');
       if (rec.id === citizenId) throw badRequest('self_transfer', 'You cannot send money to yourself');
-      if (p.amount > 500000) throw badRequest('limit', 'The limit for one transfer is P 5,000.00');
+      if (p.amount > country().limits.transferMax) throw badRequest('limit', `The limit for one transfer is ${fmt(country().limits.transferMax)}`);
       await requireFunds(db, citizenId, p.amount);
       const to = `${rec.first_name} ${rec.last_name[0]}.`;
       return {
@@ -110,17 +116,17 @@ const defs: Record<string, Def<any>> = {
 
   pay_bill: {
     requiresPin: true,
-    schema: z.object({ biller: z.enum(['bpc', 'wuc']), ref: z.string().min(1), amount }),
+    schema: z.object({ biller: oneOf(() => payableBillers().map((b) => b.id), 'biller'), ref: z.string().min(1), amount }),
     async prepare(db, _ctx, citizenId, p) {
       const b = await one<any>(db, 'SELECT id, name, ref_label, ref_pattern FROM billers WHERE id = $1', [p.biller]);
       if (!b) throw notFound('Unknown biller');
       const ref = p.ref.replace(/\s+/g, '');
       if (!new RegExp(b.ref_pattern).test(ref)) throw badRequest('invalid_reference', `Check the ${b.ref_label.toLowerCase()}`);
-      if (p.amount < 1000) throw badRequest('minimum', 'The minimum payment is P 10.00');
+      if (p.amount < country().limits.billMin) throw badRequest('minimum', `The minimum payment is ${fmt(country().limits.billMin)}`);
       await requireFunds(db, citizenId, p.amount);
       return {
         params: { biller: b.id, ref, amount: p.amount },
-        label: `Pay ${fmt(p.amount)} to ${b.id.toUpperCase()}`,
+        label: `Pay ${fmt(p.amount)} to ${packBiller(b.id)?.short ?? b.name}`,
         amount: p.amount,
         readback: [['To', b.name], [b.ref_label, ref], ['Amount', fmt(p.amount)], ['Fee', fmt(0)]],
       };
@@ -138,7 +144,7 @@ const defs: Record<string, Def<any>> = {
           { account: `payable:biller:${b.id}`, amount: -p.amount },
         ],
       });
-      if (b.id === 'bpc') {
+      if (packBiller(b.id)?.category === 'electricity') {
         const token = await ctx.vending.electricityToken(p.ref, p.amount);
         await notify(db, citizenId, 'Electricity token', `${token} (${fmt(p.amount)}, meter ${p.ref})`, { sms: true });
         return { message: `Paid ${fmt(p.amount)}. Your electricity token is ${token}.`, token };
@@ -150,13 +156,14 @@ const defs: Record<string, Def<any>> = {
 
   buy_airtime: {
     requiresPin: true,
-    schema: z.object({ network: z.enum(['mascom', 'orange', 'btc']), phone: z.string().optional(), amount }),
+    schema: z.object({ network: oneOf(() => networks().map((n) => n.id), 'network'), phone: z.string().optional(), amount }),
     async prepare(db, _ctx, citizenId, p) {
       const me = await citizenName(db, citizenId);
       const phone = p.phone ? normalisePhone(p.phone) : me.phone;
-      if (p.amount < 500 || p.amount > 50000) throw badRequest('limit', 'Airtime is from P 5.00 to P 500.00');
+      const { airtimeMin, airtimeMax } = country().limits;
+      if (p.amount < airtimeMin || p.amount > airtimeMax) throw badRequest('limit', `Airtime is from ${fmt(airtimeMin)} to ${fmt(airtimeMax)}`);
       await requireFunds(db, citizenId, p.amount);
-      const net = { mascom: 'Mascom', orange: 'Orange', btc: 'BTC' }[p.network as 'mascom'];
+      const net = packBiller(p.network)!.name;
       return {
         params: { network: p.network, phone, amount: p.amount },
         label: `Buy ${fmt(p.amount)} ${net} airtime`,
@@ -168,7 +175,7 @@ const defs: Record<string, Def<any>> = {
       await ensureAccount(db, `payable:biller:${p.network}`, 'liability', `Payable · ${p.network}`);
       await post(db, {
         kind: 'airtime',
-        description: `${p.network === 'btc' ? 'BTC' : p.network[0].toUpperCase() + p.network.slice(1)} airtime`,
+        description: `${packBiller(p.network)?.name ?? p.network} airtime`,
         idempotencyKey: `action:${actionId}`,
         meta: { actionId },
         lines: [
@@ -183,10 +190,10 @@ const defs: Record<string, Def<any>> = {
 
   top_up: {
     requiresPin: true,
-    schema: z.object({ source: z.enum(['orange_money', 'myzaka']), amount }),
+    schema: z.object({ source: oneOf(() => country().topUpSources.map((s) => s.id), 'top-up source'), amount }),
     async prepare(_db, _ctx, _citizenId, p) {
-      if (p.amount > 1000000) throw badRequest('limit', 'The top-up limit is P 10,000.00');
-      const name = p.source === 'orange_money' ? 'Orange Money' : 'MyZaka';
+      if (p.amount > country().limits.topUpMax) throw badRequest('limit', `The top-up limit is ${fmt(country().limits.topUpMax)}`);
+      const name = sourceName(p.source);
       return {
         params: { source: p.source, amount: p.amount },
         label: `Top up ${fmt(p.amount)} from ${name}`,
@@ -201,7 +208,7 @@ const defs: Record<string, Def<any>> = {
       await ensureAccount(db, code, 'asset', `Settlement · ${p.source}`);
       await post(db, {
         kind: 'top_up',
-        description: `Top up from ${p.source === 'orange_money' ? 'Orange Money' : 'MyZaka'}`,
+        description: `Top up from ${sourceName(p.source)}`,
         idempotencyKey: `action:${actionId}`,
         meta: { actionId },
         lines: [
@@ -219,7 +226,7 @@ const defs: Record<string, Def<any>> = {
     async prepare(db, ctx, citizenId, p) {
       const t = await getTemplate(db, 'driver_licence_renewal');
       const lic = await one<any>(db, `SELECT data, valid_to FROM documents WHERE citizen_id = $1 AND type = 'driver_licence' AND status = 'valid'`, [citizenId]);
-      if (!lic) throw badRequest('no_licence', 'You have no driver\'s licence on record. Visit DRTS to apply for a first licence.');
+      if (!lic) throw badRequest('no_licence', `You have no driver's licence on record. Visit ${country().agencies.licence.code} to apply for a first licence.`);
       const open = await one(db, `SELECT ref FROM applications WHERE citizen_id = $1 AND template_code = 'driver_licence_renewal' AND status = 'open'`, [citizenId]);
       if (open) throw conflict('already_open', `You already have a renewal in progress (${(open as any).ref}).`);
       const loc = await one<any>(db, `SELECT id, name FROM locations WHERE id = $1 AND kind = 'eye_test'`, [p.eyeTest.locationId]);
@@ -231,9 +238,9 @@ const defs: Record<string, Def<any>> = {
         label: `Pay ${fmt(t.fee)} and renew licence`,
         amount: t.fee,
         readback: [
-          ['Service', `Driver's licence renewal · Class ${lic.data.licence_class ?? 'B'}`],
+          ['Service', `${t.name} · ${country().licence.classWord} ${lic.data.licence_class ?? 'B'}`],
           ['Eye test', `${dayLabel(at)} ${timeLabel(at)} · ${loc.name}`],
-          ['Collect card at', 'DRTS · Gaborone Main Mall'],
+          ['Collect card at', country().licence.collectAt],
           ['Fee', fmt(t.fee)],
         ],
       };
@@ -256,7 +263,7 @@ const defs: Record<string, Def<any>> = {
         params: {},
         label: `Pay ${fmt(t.fee)} for a birth certificate copy`,
         amount: t.fee,
-        readback: [['Service', 'Birth certificate (digital copy)'], ['For', `${me.first_name} ${me.last_name}`], ['Delivered to', 'Your Vault'], ['Fee', fmt(t.fee)]],
+        readback: [['Service', `${t.name} (digital copy)`], ['For', `${me.first_name} ${me.last_name}`], ['Delivered to', 'Your Vault'], ['Fee', fmt(t.fee)]],
       };
     },
     async execute(db, _ctx, citizenId) {
@@ -269,16 +276,18 @@ const defs: Record<string, Def<any>> = {
     requiresPin: false,
     schema: z.object({}).passthrough(),
     async prepare(db, ctx, citizenId) {
+      const t = await getTemplate(db, 'tax_clearance');
+      const tax = country().agencies.tax.code;
       const c = await one<any>(db, 'SELECT omang_hash FROM citizens WHERE id = $1', [citizenId]);
       const rec = await ctx.registry.findByHash(c.omang_hash);
       if (rec && !rec.taxCompliant) {
-        throw conflict('not_compliant', 'BURS shows outstanding returns or tax owed. Contact BURS to settle them first.');
+        throw conflict('not_compliant', `${tax} shows outstanding returns or tax owed. Contact ${tax} to settle them first.`);
       }
       return {
         params: {},
-        label: 'Issue tax clearance certificate',
+        label: `Issue ${t.name.toLowerCase()}`,
         amount: 0,
-        readback: [['Service', 'Tax clearance certificate'], ['From', 'BURS'], ['Valid for', '90 days'], ['Fee', fmt(0)]],
+        readback: [['Service', t.name], ['From', tax], ['Valid for', `${t.output?.validDays ?? 90} days`], ['Fee', fmt(0)]],
       };
     },
     async execute(db, _ctx, citizenId) {

@@ -19,17 +19,18 @@
 </style>
 </head>
 <body>
-<header class="top"><span class="mini-flag"><i></i><i></i><i></i><i></i><i></i></span><h1>USSD simulator · *321#</h1></header>
+<header class="top"><span class="mini-flag" data-flag></span><h1 id="title">USSD simulator</h1></header>
 <main style="max-width:720px">
   <p class="hint">This page plays the part of the mobile network's USSD gateway, so you can try the feature-phone menu without a SIM. In production the operator's gateway calls <span class="mono">POST /v1/ussd</span>.</p>
   <div class="fp">
-    <div class="field"><label for="phone">Phone number (demo: 71234558 is Naledi, PIN 2580)</label><input id="phone" value="+26771234558" inputmode="tel"></div>
-    <div class="lcd" id="lcd" aria-live="polite">Dial *321# and press Call.</div>
-    <input id="in" value="*321#" aria-label="Input">
+    <div class="field"><label for="phone" id="phoneLabel">Phone number</label><input id="phone" value="" inputmode="tel"></div>
+    <div class="lcd" id="lcd" aria-live="polite">Loading…</div>
+    <input id="in" value="" aria-label="Input">
     <div class="keys" id="keys"></div>
     <div class="acts"><button id="call" style="background:var(--good);color:#fff">Call</button><button id="clr" style="background:var(--key);color:var(--key-ink)">Clear</button><button id="end" style="background:var(--crit);color:#fff">End</button></div>
   </div>
 </main>
+<script src="/flags.js"></script>
 <script src="/ussd.js"></script>
 </body>
 </html>

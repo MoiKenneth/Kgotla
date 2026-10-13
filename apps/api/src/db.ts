@@ -1,8 +1,8 @@
 import pg from 'pg';
 import { config } from './config.js';
 
-// Return BIGINT (int8) as JS number. Ledger amounts are thebe and stay far
-// below 2^53 (about 90 trillion pula), so this is safe and keeps code simple.
+// Return BIGINT (int8) as JS number. Ledger amounts are minor units and stay far
+// below 2^53 (about 90 trillion in major units), so this is safe and keeps code simple.
 pg.types.setTypeParser(20, (v) => Number(v));
 // NUMERIC as number (scores).
 pg.types.setTypeParser(1700, (v) => Number(v));
@@ -11,8 +11,28 @@ pg.types.setTypeParser(1082, (v) => v);
 
 export type Queryable = Pick<pg.Pool, 'query'> | pg.PoolClient;
 
+/**
+ * Microsoft Entra token for Azure Database for PostgreSQL, fetched with the
+ * cell's managed identity and cached until five minutes before it expires.
+ * The database never sees a stored password.
+ */
+let cached: { token: string; expires: number } | null = null;
+async function entraToken(): Promise<string> {
+  if (cached && cached.expires - Date.now() > 5 * 60_000) return cached.token;
+  const { ManagedIdentityCredential } = await import('@azure/identity');
+  const cred = config.azureClientId ? new ManagedIdentityCredential({ clientId: config.azureClientId }) : new ManagedIdentityCredential();
+  const t = await cred.getToken('https://ossrdbms-aad.database.windows.net/.default');
+  if (!t) throw new Error('Could not get a Microsoft Entra token for PostgreSQL');
+  cached = { token: t.token, expires: t.expiresOnTimestamp };
+  return t.token;
+}
+
 export function createPool(url = config.databaseUrl): pg.Pool {
-  return new pg.Pool({ connectionString: url, max: 10 });
+  const base: pg.PoolConfig = { max: 10 };
+  // With no URL, node-postgres reads PGHOST, PGUSER, PGDATABASE, PGPORT and PGSSLMODE.
+  if (url) base.connectionString = url;
+  if (config.dbAuth === 'entra' && !url) base.password = entraToken;
+  return new pg.Pool(base);
 }
 
 /** Run fn inside a transaction. Rolls back on any thrown error. */

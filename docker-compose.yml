@@ -1,4 +1,6 @@
 # Local demo: `docker compose up --build`, then open http://localhost:8080
+# Another country: `KGOTLA_COUNTRY=ZA docker compose up --build` (BW, ZA, NA, ZM or ZW).
+# Each country needs its own database: run `docker compose down -v` before switching.
 # Demo mode seeds example citizens and officers. Never use these settings for a real pilot.
 services:
   db:
@@ -21,6 +23,7 @@ services:
     environment:
       NODE_ENV: development
       DEMO_MODE: "true"
+      KGOTLA_COUNTRY: ${KGOTLA_COUNTRY:-BW}
       DATABASE_URL: postgres://postgres:kgotla@db:5432/kgotla
       KGOTLA_SECRET: change-me-to-a-long-random-string-before-sharing-this
       PUBLIC_BASE_URL: http://localhost:8080

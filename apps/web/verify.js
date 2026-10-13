@@ -2,7 +2,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const LABEL = { name: 'Full name', photo: 'Photo', dob: 'Date of birth', over18: 'Over 18', district: 'Home district', omang_last4: 'Omang (last 4)' };
+  const LABEL = { name: 'Full name', photo: 'Photo', dob: 'Date of birth', over18: 'Over 18', district: 'Home district', id_last4: 'ID (last 4 digits)', omang_last4: 'ID (last 4 digits)' };
 
   async function check(code) {
     const r = $('result');
@@ -13,7 +13,7 @@
       const j = await res.json();
       if (!res.ok) throw j.error || { message: 'Check failed' };
       if (!j.valid) { r.innerHTML = `<h2><span class="chip crit">NOT VALID</span></h2><p>${esc(j.reason)}</p>`; return; }
-      r.innerHTML = `<h2><span class="chip good">VALID</span> Kgotla ID · assurance level ${esc(j.assuranceLevel)}</h2>
+      r.innerHTML = `<h2><span class="chip good">VALID</span> Kgotla ID · ${esc(j.country || '')} · assurance level ${esc(j.assuranceLevel)}</h2>
         <div class="tbl"><table><tbody>${Object.entries(j.claims).map(([k, v]) => `<tr><th>${esc(LABEL[k] || k)}</th><td>${k === 'over18' ? (v ? '<span class="chip good">YES</span>' : '<span class="chip crit">NO</span>') : k === 'photo' ? 'Shown by the registry photo service' : esc(v)}</td></tr>`).join('')}</tbody></table></div>
         <p class="hint">This code expires ${esc(new Date(j.expiresAt).toLocaleTimeString())}. The citizen chose to share only these details.</p>`;
     } catch (e) { r.innerHTML = `<p class="err">${esc(e.message)}</p>`; }

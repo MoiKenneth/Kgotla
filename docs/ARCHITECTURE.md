@@ -1,6 +1,6 @@
 # Architecture
 
-Phase 1 runs as a **modular monolith**: one Node.js (Fastify, TypeScript) service and one PostgreSQL database per country cell. Module boundaries match the blueprint's future microservices (identity, consent, vault, payments, gov engine, places, notifications, AI), so each can be split out when scale demands it, without changing the API.
+Phase 1 runs as a **modular monolith**: one Node.js (Fastify, TypeScript) service and one PostgreSQL database per country cell. Phase 2 runs five cells (Botswana, South Africa, Namibia, Zambia, Zimbabwe) from the same build. Module boundaries match the blueprint's future microservices (identity, consent, vault, payments, gov engine, places, notifications, AI), so each can be split out when scale demands it, without changing the API.
 
 ```mermaid
 flowchart LR
@@ -34,6 +34,14 @@ flowchart LR
   ACT -. adapter .-> VEND[BPC / MNO vending]
   AI -. API .-> CLAUDE[Claude]
 ```
+
+## Country cells
+
+`KGOTLA_COUNTRY` selects a country pack (`src/countries/`) at start-up: national ID rules, phone numbering, currency, agencies, services and fees, billers, mobile-money sources, offices, limits, languages and demo data. Everything that differs between countries is data in the pack; the modules, the assistant's tool schema, USSD menus and web clients read it. `GET /v1/config` publishes the non-secret part of the pack to the web apps.
+
+Each cell has its own database, bound to its country on first start (`cell_meta`); a cell refuses to start against another country's database. Identifier hashes use a per-country prefix, so the same number in two countries never collides. Cells do not share data: a citizen who moves country enrols in the new cell. Cross-border features (remittances, mutual ID recognition) are a later phase and would go through explicit, consented APIs between cells.
+
+On Azure each cell is a Container App with its own managed identity, Key Vault and PostgreSQL server, behind a shared registry and Container Apps environment (`infra/`, [DEPLOY.md](DEPLOY.md)). The app signs in to PostgreSQL with a Microsoft Entra token from its managed identity, so no database password exists.
 
 ## Confirmable actions
 
@@ -77,7 +85,7 @@ Services are rows in `service_templates`: agency, fee, ordered steps and the doc
 
 ## Identity
 
-- The Omang number is stored only as an HMAC (keyed with `KGOTLA_SECRET`) plus its last 4 digits. The raw number lives only for the 20-minute life of an enrolment and is then erased.
+- The national ID number (Omang in Botswana) is stored only as an HMAC (keyed with `KGOTLA_SECRET`, prefixed per country) plus its last 4 characters. The raw number lives only for the 20-minute life of an enrolment and is then erased.
 - Enrolment: registry lookup → SMS OTP (5 attempts) → liveness + 1:1 face match (selfie never stored) → PIN (scrypt) → assurance level 3.
 - Selective disclosure tokens are signed (HMAC-SHA256 in Phase 1; Ed25519 in an HSM for production so verifiers can check offline), contain only chosen claims, and expire after 2 minutes. `disclosures` stores which claim *names* were shared, never values.
 

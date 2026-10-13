@@ -1,14 +1,17 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { assertConfig, config } from './config.js';
+import { useCountry } from './countries/index.js';
 import { buildApp } from './app.js';
 import { createPool } from './db.js';
 import { MemorySms, processOutbox } from './lib/notify.js';
-import { migrate } from './migrate.js';
+import { assertCell, migrate } from './migrate.js';
 import { seedDemo, seedReference } from './seed.js';
 
 assertConfig();
+const pack = useCountry(config.country);
 const pool = createPool();
 await migrate(pool);
+await assertCell(pool, pack.code);
 await seedReference(pool);
 if (config.demoMode) await seedDemo(pool);
 
@@ -29,4 +32,4 @@ process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 
 await app.listen({ port: config.port, host: config.host });
-app.log.info(`Kgotla API on :${config.port} · demo mode ${config.demoMode ? 'ON' : 'off'} · assistant ${llm ? config.anthropicModel : 'rules (no ANTHROPIC_API_KEY)'}`);
+app.log.info(`Kgotla ${pack.name} cell on :${config.port} · demo mode ${config.demoMode ? 'ON' : 'off'} · assistant ${llm ? config.anthropicModel : 'rules (no ANTHROPIC_API_KEY)'}`);

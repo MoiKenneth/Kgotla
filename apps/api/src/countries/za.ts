@@ -1,0 +1,115 @@
+import { digits, licenceSteps, luhnValid, validYYMMDD, type CountryPack } from './types.js';
+
+/** South Africa: Phase 2 cell. Fees are demo values. */
+export const ZA: CountryPack = {
+  code: 'ZA',
+  name: 'South Africa',
+  possessive: "South Africa's",
+  phase: 2,
+  currency: { code: 'ZAR', symbol: 'R', minorName: 'cents' },
+  utcOffset: '+02:00',
+  languages: [{ code: 'en', name: 'English' }],
+  plannedLanguages: ['isiZulu', 'isiXhosa', 'Afrikaans', 'Sepedi', 'Setswana', 'Sesotho'],
+  nationalId: {
+    name: 'ID number',
+    short: 'SA ID',
+    documentTitle: 'South African smart ID card',
+    example: '9106230120087',
+    inputMode: 'numeric',
+    maxLength: 15,
+    error: 'A South African ID number has 13 digits and a valid check digit',
+    hashPrefix: 'za-id:',
+    // 13 digits: YYMMDD SSSS C A Z, last digit is a Luhn check digit.
+    normalise: (raw) => {
+      const d = digits(raw);
+      return /^\d{13}$/.test(d) && validYYMMDD(d.slice(0, 6)) && luhnValid(d) ? d : null;
+    },
+    display: (id) => `${id.slice(0, 6)} ${id.slice(6, 10)} ${id.slice(10)}`,
+  },
+  phone: { cc: '27', nsn: 9, trunk: true, example: '082 123 4567' },
+  ussdCode: '*321#',
+  agencies: {
+    licence: { code: 'DLTC', name: 'Driving Licence Testing Centre' },
+    civil: { code: 'DHA', name: 'Department of Home Affairs' },
+    tax: { code: 'SARS', name: 'South African Revenue Service' },
+    immigration: { code: 'DHA', name: 'Department of Home Affairs' },
+    health: { code: 'NDOH', name: 'National Department of Health' },
+    exams: { code: 'DBE', name: 'Department of Basic Education' },
+  },
+  licence: { classWord: 'Code', collectAt: 'Licensing centre · Johannesburg' },
+  services: [
+    {
+      code: 'driver_licence_renewal',
+      name: 'Driving licence card renewal',
+      agency: 'DLTC',
+      fee: 25000,
+      steps: licenceSteps('the licensing centre'),
+      output: { type: 'driver_licence', title: 'Driving licence · Code {licence_class}', issuer: 'DLTC', validYears: 5 },
+    },
+    {
+      code: 'birth_certificate_copy',
+      name: 'Unabridged birth certificate',
+      agency: 'DHA',
+      fee: 7500,
+      steps: [
+        { key: 'submitted', label: 'Submitted' },
+        { key: 'processing', label: 'Being processed by Home Affairs' },
+        { key: 'issued', label: 'Copy issued to your Vault' },
+      ],
+      output: { type: 'birth_certificate', title: 'Unabridged birth certificate · {name}', issuer: 'DHA' },
+    },
+    {
+      code: 'tax_clearance',
+      name: 'Tax compliance status',
+      agency: 'SARS',
+      fee: 0,
+      steps: [{ key: 'issued', label: 'Tax compliance status issued to your Vault' }],
+      output: { type: 'tax_clearance', title: 'Tax compliance status (SARS)', issuer: 'SARS', validDays: 90 },
+    },
+  ],
+  billers: [
+    { id: 'eskom', name: 'Eskom prepaid electricity', short: 'Eskom', category: 'electricity', refLabel: 'Meter number', refPattern: '^\\d{11,13}$', placeholder: '0412 7788 3301' },
+    { id: 'jhbwater', name: 'Johannesburg Water', short: 'Jhb Water', category: 'water', refLabel: 'Account number', refPattern: '^\\d{8,12}$', placeholder: '554013829' },
+    { id: 'vodacom', name: 'Vodacom', short: 'Vodacom', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'mtn', name: 'MTN', short: 'MTN', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'cellc', name: 'Cell C', short: 'Cell C', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'telkom', name: 'Telkom', short: 'Telkom', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+  ],
+  topUpSources: [
+    { id: 'payshap', name: 'PayShap (from your bank)' },
+    { id: 'instant_eft', name: 'Instant EFT' },
+  ],
+  locations: [
+    { id: 'za-eye-jhb', kind: 'eye_test', name: 'Licensing centre eye test · Johannesburg', agency: 'DLTC', capacity: 4, slots: ['08:00', '09:00', '10:30', '13:00', '14:30'], services: [], counters: 1 },
+    { id: 'za-eye-soweto', kind: 'eye_test', name: 'Partner optometrist · Soweto', agency: 'DLTC', capacity: 2, slots: ['09:00', '11:00', '15:00'], services: [], counters: 1 },
+    { id: 'za-clinic-soweto', kind: 'clinic', name: 'Community clinic · Soweto', agency: 'NDOH', capacity: 5, slots: ['07:30', '08:30', '09:30', '11:00', '13:30', '15:00'], services: [], counters: 1 },
+    { id: 'za-clinic-alex', kind: 'clinic', name: 'Community clinic · Alexandra', agency: 'NDOH', capacity: 4, slots: ['08:00', '09:00', '10:00', '14:00'], services: [], counters: 1 },
+    { id: 'za-clinic-tembisa', kind: 'clinic', name: 'Community clinic · Tembisa', agency: 'NDOH', capacity: 4, slots: ['08:00', '09:30', '11:00', '14:30'], services: [], counters: 1 },
+    { id: 'za-dha-jhb-pp', kind: 'passport', name: 'Home Affairs · Johannesburg', agency: 'DHA', capacity: 4, slots: ['08:00', '09:00', '10:30', '13:00'], services: [], counters: 1 },
+    { id: 'za-dha-pta-pp', kind: 'passport', name: 'Home Affairs · Pretoria', agency: 'DHA', capacity: 3, slots: ['08:30', '10:00', '14:00'], services: [], counters: 1 },
+    { id: 'za-dltc-jhb', kind: 'office', name: 'Licensing centre · Johannesburg', agency: 'DLTC', capacity: 1, slots: [], services: ['Licence card collection', 'Learner licence booking'], counters: 6 },
+    { id: 'za-dha-jhb', kind: 'office', name: 'Home Affairs · Johannesburg', agency: 'DHA', capacity: 1, slots: [], services: ['Smart ID collection', 'Birth registration'], counters: 8 },
+    { id: 'za-sars-jhb', kind: 'office', name: 'SARS branch · Johannesburg', agency: 'SARS', capacity: 1, slots: [], services: ['eFiling help', 'Tax compliance'], counters: 4 },
+    { id: 'za-sassa-soweto', kind: 'office', name: 'SASSA office · Soweto', agency: 'SASSA', capacity: 1, slots: [], services: ['Grant enquiry', 'Life certificate'], counters: 3 },
+  ],
+  limits: { transferMax: 500000, billMin: 1000, airtimeMin: 500, airtimeMax: 50000, topUpMax: 1000000, demoCredit: 250000 },
+  chips: { send: [50, 100, 200, 500], bills: [100, 200, 300, 500], airtime: [10, 29, 50, 100], topup: [100, 250, 500, 1000] },
+  demo: {
+    meter: '04127788330',
+    people: [
+      { id: '9106230120087', first: 'Thandiwe', last: 'Nkosi', dob: '1991-06-23', sex: 'F', district: 'Johannesburg', phone: '+27821234567', licenceClass: 'B', licenceDays: 30, taxCompliant: true, pin: '2580' },
+      { id: '8804125126083', first: 'Sipho', last: 'Dlamini', dob: '1988-04-12', sex: 'M', district: 'Soweto', phone: '+27731234568', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1357' },
+      { id: '9509175601088', first: 'Pieter', last: 'van Wyk', dob: '1995-09-17', sex: 'M', district: 'Pretoria', phone: '+27841234569', licenceClass: 'B', licenceDays: 900, taxCompliant: true, pin: '2468' },
+      { id: '7001020129087', first: 'Nomvula', last: 'Mokoena', dob: '1970-01-02', sex: 'F', district: 'Soweto', phone: '+27611234570', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1470' },
+      { id: '0212305682081', first: 'Tshepo', last: 'Molefe', dob: '2002-12-30', sex: 'M', district: 'Tembisa', phone: '+27791234571', licenceClass: 'B', licenceDays: 400, taxCompliant: false },
+      { id: '8505155751084', first: 'Johan', last: 'Botha', dob: '1985-05-15', sex: 'M', district: 'Centurion', phone: '+27831234572', licenceClass: 'EB', licenceDays: 1200, taxCompliant: true },
+    ],
+    officers: [
+      { username: 'dltc.case', name: 'Lindiwe Khumalo', agency: 'DLTC', role: 'caseworker' },
+      { username: 'dha.case', name: 'Ayanda Mthembu', agency: 'DHA', role: 'caseworker' },
+      { username: 'sars.case', name: 'Riaan Pretorius', agency: 'SARS', role: 'caseworker' },
+      { username: 'dltc.counter', name: 'Precious Ndlovu', agency: 'DLTC', role: 'counter' },
+      { username: 'admin', name: 'Kgotla Operations', agency: 'KGOTLA', role: 'admin' },
+    ],
+  },
+};

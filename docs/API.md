@@ -8,11 +8,11 @@ JSON over HTTPS. Citizen and officer endpoints take `Authorization: Bearer <toke
 |---|---|---|
 | GET | `/health` | Liveness check |
 | GET | `/v1/config` | Country, demo mode, assistant mode |
-| POST | `/v1/enrol/start` | `{omang}` → `{enrolmentId, phoneMasked}` (+`demoOtp` in demo mode) |
+| POST | `/v1/enrol/start` | `{nationalId}` → `{enrolmentId, phoneMasked}` (+`demoOtp` in demo mode) |
 | POST | `/v1/enrol/:id/otp` | `{code}` → `{ok}` |
 | POST | `/v1/enrol/:id/liveness` | `{selfie: dataURL}` → `{passed, match}` |
 | POST | `/v1/enrol/:id/complete` | `{pin, lang?}` → `{token}` |
-| POST | `/v1/auth/login` | `{omang, pin}` → `{token}` |
+| POST | `/v1/auth/login` | `{nationalId, pin}` → `{token}` |
 | POST | `/v1/auth/logout` | Revoke the session |
 | POST | `/v1/verify` | `{code}` → `{valid, claims, assuranceLevel}` or `{valid:false, reason}` |
 | GET | `/s/:token` | Public page for a shared document |
@@ -61,7 +61,7 @@ Amounts are pula as a string or number with at most 2 decimals (`"125.50"`); res
 
 ## Issuers
 
-`POST /v1/issuer/documents` with headers `x-issuer-id`, `x-issuer-key` and body `{omang, type, title, ref?, validTo?, data?}` puts a document into the citizen's Vault and notifies them.
+`POST /v1/issuer/documents` with headers `x-issuer-id`, `x-issuer-key` and body `{nationalId, type, title, ref?, validTo?, data?}` puts a document into the citizen's Vault and notifies them.
 
 ## Officers
 
@@ -75,3 +75,7 @@ Amounts are pula as a string or number with at most 2 decimals (`"125.50"`); res
 | GET | `/v1/officer/queue/:locationId` | counter |
 | POST | `/v1/officer/queue/:locationId/call-next` | counter; `{counter}` |
 | GET | `/v1/officer/overview` | admin; includes ledger balance and audit-chain status |
+
+## Country cells
+
+Every cell serves the same API. `nationalId` takes the ID in the cell's own format (spaces, dashes and slashes are accepted); the Phase 1 field name `omang` is still accepted everywhere as an alias. `GET /v1/config` returns `pack`, the cell's public country settings: ID and phone rules, currency, agencies, billers, top-up sources, quick amounts, languages, USSD code and, in demo mode, the demo accounts. Disclosure claims use `id_last4` (`omang_last4` is accepted as an alias), and verified codes report the issuing `country`.

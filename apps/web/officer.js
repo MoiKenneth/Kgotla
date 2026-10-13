@@ -5,7 +5,8 @@
   const $ = (id) => document.getElementById(id);
   const ss = { get: (k) => { try { return sessionStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { sessionStorage.setItem(k, v); } catch (e) {} }, del: (k) => { try { sessionStorage.removeItem(k); } catch (e) {} } };
   const S = { token: ss.get('kgo.token'), me: null, tab: null, status: 'open', office: null, counter: 1, cfg: null, error: '' };
-  const fdt = (x) => { const d = new Date(new Date(x).getTime() + 2 * 3600e3); return d.toISOString().slice(0, 16).replace('T', ' '); };
+  const idShort = () => (S.cfg && S.cfg.pack ? S.cfg.pack.nationalId.short : 'ID');
+  const fdt = (x) => { const off = S.cfg && S.cfg.pack ? S.cfg.pack.utcOffsetMinutes : 120; const d = new Date(new Date(x).getTime() + off * 60e3); return d.toISOString().slice(0, 16).replace('T', ' '); };
 
   async function api(method, path, body) {
     const r = await fetch(path, { method, headers: Object.assign({ 'content-type': 'application/json' }, S.token ? { authorization: 'Bearer ' + S.token } : {}), body: body ? JSON.stringify(body) : undefined });
@@ -24,7 +25,7 @@
         <div class="field"><label for="u">Username</label><input id="u" autocomplete="username" required></div>
         <div class="field"><label for="p">Password</label><input id="p" type="password" autocomplete="current-password" required></div>
         ${S.error ? `<p class="err">${esc(S.error)}</p>` : ''}<button class="btn">Sign in</button>
-        ${S.cfg && S.cfg.demoMode ? `<div class="demo">Demo accounts, password <b>kgotla-demo</b>: <span class="mono">drts.case</span>, <span class="mono">cnr.case</span>, <span class="mono">burs.case</span> (case workers), <span class="mono">drts.counter</span> (counter), <span class="mono">admin</span>.</div>` : ''}</form>`;
+        ${S.cfg && S.cfg.demoMode && S.cfg.pack && S.cfg.pack.demo ? `<div class="demo">Demo accounts${S.cfg.pack.demo.officerPassword ? `, password <b>${esc(S.cfg.pack.demo.officerPassword)}</b>` : ' (password is in this cell\'s Key Vault)'}: ${S.cfg.pack.demo.officers.map((o) => `<span class="mono">${esc(o.username)}</span> (${esc(o.agency)} ${esc(o.role)})`).join(', ')}.</div>` : ''}</form>`;
       return;
     }
     $('who').textContent = `${S.me.name} · ${S.me.agency} · ${S.me.role}`;
@@ -49,7 +50,7 @@
       ${rows.length ? `<div class="tbl"><table><thead><tr><th>Reference</th><th>Citizen</th><th>Service</th><th>Step</th><th>Submitted</th><th></th></tr></thead><tbody>
       ${rows.map((a) => {
         const next = a.steps[a.step + 1];
-        return `<tr><td class="mono">${esc(a.ref)}</td><td>${esc(a.citizen.name)}<br><span class="hint mono">Omang ***${esc(a.citizen.omangLast4)}</span></td><td>${esc(a.title)}${a.data && a.data.licence_class ? `<br><span class="hint">Class ${esc(a.data.licence_class)}</span>` : ''}</td>
+        return `<tr><td class="mono">${esc(a.ref)}</td><td>${esc(a.citizen.name)}<br><span class="hint mono">${esc(idShort())} ***${esc(a.citizen.idLast4 || a.citizen.omangLast4)}</span></td><td>${esc(a.title)}${a.data && a.data.licence_class ? `<br><span class="hint">Class ${esc(a.data.licence_class)}</span>` : ''}</td>
           <td>${a.status === 'open' ? `<span class="chip">${esc(a.steps[a.step].label)}</span><br><span class="hint">${a.step + 1} of ${a.steps.length}</span>` : a.status === 'completed' ? '<span class="chip good">Completed</span>' : '<span class="chip crit">Rejected</span>'}</td>
           <td class="mono">${esc(fdt(a.createdAt))}</td>
           <td>${a.status === 'open' && next ? `<div class="row"><button class="btn sky" data-adv="${a.id}">${esc(next.label)}</button><button class="btn crit" data-rej="${a.id}">Reject</button></div>` : ''}</td></tr>`;

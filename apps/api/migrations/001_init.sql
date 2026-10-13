@@ -2,7 +2,8 @@
 -- Money is stored as integer thebe (1 BWP = 100 thebe). Never floats.
 -- Personal identifiers (Omang) are stored as keyed hashes plus last 4 digits only.
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
+-- gen_random_uuid() is built into PostgreSQL 13+: no extensions needed (works on managed
+-- services such as Azure Database for PostgreSQL without allow-listing).
 
 -- ---------------------------------------------------------------------------
 -- Mock national registry. In production this schema does not exist: the

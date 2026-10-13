@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { config } from '../config.js';
+import { country } from '../countries/index.js';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number, opts: object) => Promise<Buffer>;
 
@@ -9,8 +10,11 @@ export const randomToken = (bytes = 32) => b64url(randomBytes(bytes));
 export const sha256 = (s: string) => createHash('sha256').update(s).digest('hex');
 export const hmac = (s: string, key = config.secret) => createHmac('sha256', key).update(s).digest('hex');
 
-/** Keyed hash for national ID numbers: lets us find a citizen without storing the number. */
-export const hashIdentifier = (id: string) => hmac('omang:' + id.replace(/\s+/g, ''));
+/**
+ * Keyed hash for a canonical national ID number: lets us find a citizen
+ * without storing the number. The prefix keeps countries' hashes apart.
+ */
+export const hashIdentifier = (id: string) => hmac(country().nationalId.hashPrefix + id.replace(/\s+/g, ''));
 /** Hash for bearer tokens (sessions, share links). */
 export const hashToken = (t: string) => hmac('token:' + t);
 

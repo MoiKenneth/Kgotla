@@ -40,7 +40,7 @@ describe('enrolment and sign-in', () => {
   });
 
   it('rejects unknown and malformed Omang numbers', async () => {
-    expect((await call(h.app, null, 'POST', '/v1/enrol/start', { omang: '123' })).json.error.code).toBe('invalid_omang');
+    expect((await call(h.app, null, 'POST', '/v1/enrol/start', { omang: '123' })).json.error.code).toBe('invalid_national_id');
     expect((await call(h.app, null, 'POST', '/v1/enrol/start', { omang: '999999999' })).status).toBe(404);
   });
 

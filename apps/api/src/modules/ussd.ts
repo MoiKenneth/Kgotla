@@ -1,5 +1,6 @@
 import type pg from 'pg';
 import { one, tx } from '../db.js';
+import { country, electricity } from '../countries/index.js';
 import { AppError } from '../lib/errors.js';
 import { PinError, verifyPin } from '../lib/auth.js';
 import { fmt } from '../lib/money.js';
@@ -20,13 +21,13 @@ import { queueOffices, takeTicket } from './places.js';
 type Lang = 'en' | 'tn';
 const T = {
   en: {
-    main: 'Kgotla\n1. My ID\n2. Wallet balance\n3. Send money\n4. Buy electricity (BPC)\n5. Government services\n6. Queue ticket',
+    main: 'Kgotla\n1. My ID\n2. Wallet balance\n3. Send money\n4. Buy electricity ({elec})\n5. Government services\n6. Queue ticket',
     guest: 'Kgotla\n1. Queue ticket\n2. How to register',
-    register: 'Register in the Kgotla app or at any Kgotla agent (post offices, kiosks) with your Omang.',
+    register: 'Register in the Kgotla app or at any Kgotla agent (post offices, kiosks) with your {id}.',
     pin: 'Enter your PIN:',
     toNumber: 'Enter the mobile number to send to:',
     amount: 'Enter amount in pula:',
-    meter: 'Enter your 11-digit BPC meter number:',
+    meter: 'Enter your {elec} meter number:',
     confirm: (rb: string) => `${rb}\nEnter PIN to confirm, or 0 to cancel:`,
     cancelled: 'Cancelled. Nothing was paid.',
     gov: 'Government services\n1. Licence status\n2. Tax clearance certificate\n3. My applications',
@@ -36,13 +37,13 @@ const T = {
     invalid: 'Invalid choice.',
   },
   tn: {
-    main: 'Kgotla\n1. Boitshupo jwa me\n2. Madi a me\n3. Romela madi\n4. Reka motlakase (BPC)\n5. Ditirelo tsa puso\n6. Tekete ya mola',
+    main: 'Kgotla\n1. Boitshupo jwa me\n2. Madi a me\n3. Romela madi\n4. Reka motlakase ({elec})\n5. Ditirelo tsa puso\n6. Tekete ya mola',
     guest: 'Kgotla\n1. Tekete ya mola\n2. Go ikwadisa jang',
-    register: 'Ikwadise mo app ya Kgotla kgotsa kwa moemeding wa Kgotla ka Omang ya gago.',
+    register: 'Ikwadise mo app ya Kgotla kgotsa kwa moemeding wa Kgotla ka {id} ya gago.',
     pin: 'Tsenya PIN ya gago:',
     toNumber: 'Tsenya nomoro ya mogala:',
     amount: 'Tsenya palo ya madi:',
-    meter: 'Tsenya nomoro ya mitara ya BPC:',
+    meter: 'Tsenya nomoro ya mitara ya {elec}:',
     confirm: (rb: string) => `${rb}\nTsenya PIN go netefatsa, kgotsa 0 go khansela:`,
     cancelled: 'Go khanselitswe. Ga go sepe se se duetsweng.',
     gov: 'Ditirelo tsa puso\n1. Maemo a laesense\n2. Setlankana sa lekgetho\n3. Dikopo tsa me',
@@ -52,6 +53,15 @@ const T = {
     invalid: 'Tlhopho e e sa siamang.',
   },
 };
+
+/** Put this cell's electricity provider and ID name into the menu text. */
+function fill<T extends Record<string, unknown>>(texts: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(texts)) {
+    out[k] = typeof v === 'string' ? v.replace(/\{elec\}/g, electricity().short).replace(/\{id\}/g, country().nationalId.short) : v;
+  }
+  return out as T;
+}
 
 const CON = (s: string) => `CON ${s}`;
 const END = (s: string) => `END ${s}`;
@@ -78,8 +88,8 @@ export async function handleUssd(pool: pg.Pool, ctx: ActionCtx, input: { session
   const restart = all.lastIndexOf('00');
   const path = restart >= 0 ? all.slice(restart + 1) : all;
   const citizen = await one<any>(pool, 'SELECT id, first_name, last_name, omang_last4, loa, lang FROM citizens WHERE phone = $1', [phone]);
-  const L: Lang = citizen?.lang === 'tn' ? 'tn' : 'en';
-  const t = T[L];
+  const L: Lang = citizen?.lang === 'tn' && country().languages.some((l) => l.code === 'tn') ? 'tn' : 'en';
+  const t = fill(T[L]);
   const st = await state(pool, input.sessionId, phone);
 
   try {
@@ -97,7 +107,7 @@ export async function handleUssd(pool: pg.Pool, ctx: ActionCtx, input: { session
     const [choice, ...rest] = path;
 
     if (choice === '1') {
-      return END(`${citizen.first_name} ${citizen.last_name[0]}.\nOmang ***${citizen.omang_last4}\n${L === 'tn' ? 'Seelo' : 'Assurance level'} ${citizen.loa} · ${L === 'tn' ? 'E netefaditswe' : 'Verified'}`);
+      return END(`${citizen.first_name} ${citizen.last_name[0]}.\n${country().nationalId.short} ***${citizen.omang_last4}\n${L === 'tn' ? 'Seelo' : 'Assurance level'} ${citizen.loa} · ${L === 'tn' ? 'E netefaditswe' : 'Verified'}`);
     }
 
     if (choice === '2') {
@@ -113,7 +123,7 @@ export async function handleUssd(pool: pg.Pool, ctx: ActionCtx, input: { session
       const key = `${choice}:${rest[0]}:${rest[1]}`;
       if (rest.length === 2) {
         const view = await tx(pool, (c) =>
-          createAction(c, ctx, citizen.id, isSend ? 'send_money' : 'pay_bill', isSend ? { to: rest[0], amount: rest[1] } : { biller: 'bpc', ref: rest[0], amount: rest[1] }, 'ussd'),
+          createAction(c, ctx, citizen.id, isSend ? 'send_money' : 'pay_bill', isSend ? { to: rest[0], amount: rest[1] } : { biller: electricity().id, ref: rest[0], amount: rest[1] }, 'ussd'),
         );
         await saveState(pool, input.sessionId, { ...st, [key]: view.id });
         return CON(t.confirm(view.readback.map(([k, v]: [string, string]) => `${k}: ${v}`).join('\n')));

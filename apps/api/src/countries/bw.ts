@@ -1,0 +1,116 @@
+import { digits, licenceSteps, type CountryPack } from './types.js';
+
+/** Botswana: Phase 1 launch cell. */
+export const BW: CountryPack = {
+  code: 'BW',
+  name: 'Botswana',
+  possessive: "Botswana's",
+  phase: 1,
+  currency: { code: 'BWP', symbol: 'P', minorName: 'thebe' },
+  utcOffset: '+02:00',
+  languages: [
+    { code: 'en', name: 'English' },
+    { code: 'tn', name: 'Setswana' },
+  ],
+  plannedLanguages: ['Ikalanga', 'Sesarwa'],
+  nationalId: {
+    name: 'Omang number',
+    short: 'Omang',
+    documentTitle: 'Omang (national identity card)',
+    example: '435721904',
+    inputMode: 'numeric',
+    maxLength: 11,
+    error: 'An Omang number has 9 digits',
+    hashPrefix: 'omang:',
+    normalise: (raw) => {
+      const d = digits(raw);
+      return /^\d{9}$/.test(d) ? d : null;
+    },
+    display: (id) => id,
+  },
+  phone: { cc: '267', nsn: 8, trunk: false, example: '71 234 567' },
+  ussdCode: '*321#',
+  agencies: {
+    licence: { code: 'DRTS', name: 'Department of Road Transport & Safety' },
+    civil: { code: 'CNR', name: 'Civil & National Registration' },
+    tax: { code: 'BURS', name: 'Botswana Unified Revenue Service' },
+    immigration: { code: 'DIC', name: 'Department of Immigration & Citizenship' },
+    health: { code: 'MOH', name: 'Ministry of Health' },
+    exams: { code: 'BEC', name: 'Botswana Examinations Council' },
+  },
+  licence: { classWord: 'Class', collectAt: 'DRTS · Gaborone Main Mall' },
+  services: [
+    {
+      code: 'driver_licence_renewal',
+      name: "Driver's licence renewal",
+      agency: 'DRTS',
+      fee: 15000,
+      steps: licenceSteps('DRTS', true),
+      output: { type: 'driver_licence', title: "Driver's licence · Class {licence_class}", issuer: 'DRTS', validYears: 5 },
+    },
+    {
+      code: 'birth_certificate_copy',
+      name: 'Birth certificate copy',
+      agency: 'CNR',
+      fee: 1000,
+      steps: [
+        { key: 'submitted', label: 'Submitted', label_tn: 'E rometswe' },
+        { key: 'processing', label: 'Being processed by Civil Registration', label_tn: 'E a dirwa' },
+        { key: 'issued', label: 'Copy issued to your Vault', label_tn: 'Kopi e mo Polokelong' },
+      ],
+      output: { type: 'birth_certificate', title: 'Birth certificate · {name}', issuer: 'CNR' },
+    },
+    {
+      code: 'tax_clearance',
+      name: 'Tax clearance certificate',
+      agency: 'BURS',
+      fee: 0,
+      steps: [{ key: 'issued', label: 'Certificate issued to your Vault', label_tn: 'Setlankana se mo Polokelong' }],
+      output: { type: 'tax_clearance', title: 'Tax clearance certificate', issuer: 'BURS', validDays: 90 },
+    },
+  ],
+  billers: [
+    { id: 'bpc', name: 'BPC prepaid electricity', short: 'BPC', category: 'electricity', refLabel: 'Meter number', refPattern: '^\\d{11}$', placeholder: '0412 778 8330' },
+    { id: 'wuc', name: 'Water Utilities Corporation', short: 'WUC', category: 'water', refLabel: 'Account number', refPattern: '^WUC-\\d{3}-\\d{5}$', placeholder: 'WUC-118-40291' },
+    { id: 'mascom', name: 'Mascom', short: 'Mascom', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'orange', name: 'Orange', short: 'Orange', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'btc', name: 'BTC', short: 'BTC', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+  ],
+  topUpSources: [
+    { id: 'orange_money', name: 'Orange Money' },
+    { id: 'myzaka', name: 'MyZaka' },
+  ],
+  locations: [
+    { id: 'eye-gbe-drts', kind: 'eye_test', name: 'DRTS eye-test room · Gaborone', agency: 'DRTS', capacity: 3, slots: ['08:30', '09:30', '11:00', '14:00', '15:00'], services: [], counters: 1 },
+    { id: 'eye-gbw-opt', kind: 'eye_test', name: 'Partner optometrist · Gaborone West', agency: 'DRTS', capacity: 2, slots: ['09:00', '10:30', '15:15'], services: [], counters: 1 },
+    { id: 'clinic-bontleng', kind: 'clinic', name: 'Bontleng Clinic', agency: 'MOH', capacity: 4, slots: ['08:00', '08:30', '09:30', '10:30', '14:00', '15:00'], services: [], counters: 1 },
+    { id: 'clinic-broadhurst', kind: 'clinic', name: 'Broadhurst Clinic', agency: 'MOH', capacity: 4, slots: ['08:00', '09:00', '10:00', '14:00', '15:30'], services: [], counters: 1 },
+    { id: 'clinic-oldnaledi', kind: 'clinic', name: 'Old Naledi Clinic', agency: 'MOH', capacity: 4, slots: ['08:00', '08:30', '09:30', '11:00', '14:30'], services: [], counters: 1 },
+    { id: 'imm-gbe', kind: 'passport', name: 'Immigration · Gaborone HQ', agency: 'DIC', capacity: 3, slots: ['08:15', '09:00', '10:45', '13:30'], services: [], counters: 1 },
+    { id: 'imm-ftw', kind: 'passport', name: 'Immigration · Francistown', agency: 'DIC', capacity: 2, slots: ['08:30', '10:00', '14:00'], services: [], counters: 1 },
+    { id: 'drts-mainmall', kind: 'office', name: 'DRTS · Gaborone Main Mall', agency: 'DRTS', capacity: 1, slots: [], services: ['Licence collection', 'Vehicle registration'], counters: 4 },
+    { id: 'cnr-gbe', kind: 'office', name: 'Civil & National Registration · Gaborone', agency: 'CNR', capacity: 1, slots: [], services: ['Omang replacement', 'Birth registration'], counters: 3 },
+    { id: 'burs-gbe', kind: 'office', name: 'BURS · Gaborone', agency: 'BURS', capacity: 1, slots: [], services: ['Tax returns', 'PAYE queries'], counters: 2 },
+    { id: 'dc-serowe', kind: 'office', name: 'District Commissioner · Serowe', agency: 'DC', capacity: 1, slots: [], services: ['General enquiry', 'Land board referral'], counters: 1 },
+  ],
+  limits: { transferMax: 500000, billMin: 1000, airtimeMin: 500, airtimeMax: 50000, topUpMax: 1000000, demoCredit: 250000 },
+  chips: { send: [50, 100, 200, 500], bills: [100, 200, 300, 500], airtime: [10, 20, 50, 100], topup: [100, 250, 500, 1000] },
+  demo: {
+    meter: '04127788330',
+    people: [
+      { id: '435721904', first: 'Naledi', last: 'Mothibi', dob: '1991-03-14', sex: 'F', district: 'Gaborone', phone: '+26771234558', licenceClass: 'B', licenceDays: 30, taxCompliant: true, pin: '2580' },
+      { id: '512810117', first: 'Mpho', last: 'Kgosi', dob: '1988-07-02', sex: 'M', district: 'Gaborone', phone: '+26772345614', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1357' },
+      { id: '287410556', first: 'Kabelo', last: 'Seretse', dob: '1995-11-21', sex: 'M', district: 'Francistown', phone: '+26774345630', licenceClass: 'B', licenceDays: 900, taxCompliant: true, pin: '2468' },
+      { id: '619225381', first: 'Lesego', last: 'Mothibi', dob: '1965-05-09', sex: 'F', district: 'Serowe', phone: '+26771456702', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1470' },
+      { id: '341926728', first: 'Onkemetse', last: 'Dikgang', dob: '2001-02-17', sex: 'F', district: 'Maun', phone: '+26775567811', licenceClass: 'B', licenceDays: 400, taxCompliant: false },
+      { id: '778215043', first: 'Tumelo', last: 'Ramotswa', dob: '1979-09-30', sex: 'M', district: 'Molepolole', phone: '+26776678922', licenceClass: 'C', licenceDays: 1200, taxCompliant: true },
+    ],
+    officers: [
+      { username: 'drts.case', name: 'Kagiso Molefe', agency: 'DRTS', role: 'caseworker' },
+      { username: 'cnr.case', name: 'Boitumelo Phiri', agency: 'CNR', role: 'caseworker' },
+      { username: 'burs.case', name: 'Thato Kebonang', agency: 'BURS', role: 'caseworker' },
+      { username: 'drts.counter', name: 'Oratile Sebina', agency: 'DRTS', role: 'counter' },
+      { username: 'admin', name: 'Kgotla Operations', agency: 'KGOTLA', role: 'admin' },
+    ],
+  },
+};

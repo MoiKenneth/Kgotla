@@ -37,6 +37,20 @@ export async function migrate(pool: pg.Pool, log = console.log): Promise<void> {
   }
 }
 
+/**
+ * Bind the database to one country the first time, then refuse a mismatch.
+ * A Botswana database started as South Africa would silently break every
+ * stored ID hash and amount, so this fails loudly instead.
+ */
+export async function assertCell(pool: pg.Pool, code: string): Promise<void> {
+  await pool.query(`INSERT INTO cell_meta (key, value) VALUES ('country', $1) ON CONFLICT (key) DO NOTHING`, [code]);
+  const r = await pool.query(`SELECT value FROM cell_meta WHERE key = 'country'`);
+  const bound = r.rows[0]?.value;
+  if (bound !== code) {
+    throw new Error(`This database belongs to the ${bound} cell but KGOTLA_COUNTRY is ${code}. Use the ${code} cell's own database.`);
+  }
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const pool = createPool();
   migrate(pool)

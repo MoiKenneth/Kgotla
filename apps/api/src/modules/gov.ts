@@ -181,6 +181,6 @@ export async function listApplications(db: Queryable, where: { citizenId?: strin
     data: r.data,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-    citizen: { name: `${r.first_name} ${r.last_name}`, omangLast4: r.omang_last4 },
+    citizen: { name: `${r.first_name} ${r.last_name}`, idLast4: r.omang_last4, omangLast4: r.omang_last4 },
   }));
 }

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
+    "@azure/identity": "^4.13.3",
     "@fastify/compress": "^8.3.1",
     "@fastify/cors": "^11.3.1",
     "@fastify/formbody": "^8.0.2",

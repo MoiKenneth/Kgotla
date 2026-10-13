@@ -1,0 +1,164 @@
+# Deploys Kgotla country cells to Azure. See docs/DEPLOY.md.
+#
+# Runs after the tests pass on main, or by hand (Actions > Deploy to Azure > Run workflow).
+# Does nothing until the repository has the three Azure secrets that
+# infra/bootstrap.sh prints: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID.
+#
+# Optional repository variables (Settings > Secrets and variables > Actions > Variables):
+#   KGOTLA_CELLS    JSON list of cells to run, default ["BW"]. Example: ["BW","ZA","NA","ZM","ZW"]
+#   AZURE_LOCATION  Azure region, default southafricanorth
+# Optional secret: ANTHROPIC_API_KEY turns on the Claude assistant in every cell.
+name: Deploy to Azure
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+    inputs:
+      cells:
+        description: 'Cells to deploy, as a JSON list (blank = the KGOTLA_CELLS variable, or ["BW"])'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-azure
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          CID: ${{ secrets.AZURE_CLIENT_ID }}
+          TID: ${{ secrets.AZURE_TENANT_ID }}
+          SID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+        run: |
+          if [ -n "$CID" ] && [ -n "$TID" ] && [ -n "$SID" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Azure not connected yet::Skipping deployment. Run infra/bootstrap.sh in Azure Cloud Shell and add the three secrets it prints (docs/DEPLOY.md)."
+          fi
+
+  test:
+    needs: gate
+    if: needs.gate.outputs.ready == 'true'
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: [gate, test]
+    if: needs.gate.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment: azure
+    env:
+      LOCATION: ${{ vars.AZURE_LOCATION || 'southafricanorth' }}
+      CELLS: ${{ inputs.cells || vars.KGOTLA_CELLS || '["BW"]' }}
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Check the cell list
+        run: |
+          echo "$CELLS" | jq -e 'type == "array" and length > 0 and all(.[]; test("^(BW|ZA|NA|ZM|ZW)$"))' > /dev/null \
+            || { echo "::error::Cells must be a JSON list drawn from BW, ZA, NA, ZM, ZW. Got: $CELLS"; exit 1; }
+          echo "Deploying cells $CELLS to $LOCATION"
+
+      - name: Find the deployer's object ID
+        run: |
+          OID=$(az account get-access-token --query accessToken -o tsv \
+            | python3 -c "import sys,json,base64; p=sys.stdin.read().split('.')[1]; print(json.loads(base64.urlsafe_b64decode(p+'='*(-len(p)%4)))['oid'])")
+          echo "DEPLOYER_OID=$OID" >> "$GITHUB_ENV"
+
+      - name: Pass 1 - platform, vaults and databases
+        run: |
+          az deployment sub create \
+            --name "kgotla-infra-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.parameters.json \
+            --parameters location="$LOCATION" cells="$CELLS" deployApps=false deployerObjectId="$DEPLOYER_OID" \
+            --query properties.outputs -o json > pass1.json
+          jq . pass1.json
+          echo "ACR=$(jq -r .registryName.value pass1.json)" >> "$GITHUB_ENV"
+
+      - name: Put cell secrets in Key Vault (generated once, never in git)
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          # Role assignments can take a few minutes to reach Key Vault.
+          wait_for_vault() {
+            for i in $(seq 1 30); do
+              az keyvault secret list --vault-name "$1" -o none 2>/dev/null && return 0
+              echo "Waiting for access to $1 ($i/30)"; sleep 10
+            done
+            echo "::error::No access to Key Vault $1"; return 1
+          }
+          ensure() { # vault name value-if-missing
+            if ! az keyvault secret show --vault-name "$1" --name "$2" -o none 2>/dev/null; then
+              az keyvault secret set --vault-name "$1" --name "$2" --value "$3" -o none
+              echo "Created $2 in $1"
+            fi
+          }
+          for kv in $(jq -r '.cells.value[].keyVaultName' pass1.json); do
+            wait_for_vault "$kv"
+            ensure "$kv" kgotla-secret "$(openssl rand -base64 48 | tr -d '\n')"
+            ensure "$kv" demo-officer-password "$(openssl rand -base64 18 | tr -d '/+=\n')"
+            if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+              current=$(az keyvault secret show --vault-name "$kv" --name anthropic-api-key --query value -o tsv 2>/dev/null || true)
+              [ "$current" = "$ANTHROPIC_API_KEY" ] || az keyvault secret set --vault-name "$kv" --name anthropic-api-key --value "$ANTHROPIC_API_KEY" -o none
+            else
+              ensure "$kv" anthropic-api-key unset
+            fi
+          done
+
+      - name: Build and push the image
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 18); do az acr login --name "$ACR" && break; echo "Waiting for registry access ($i/18)"; sleep 10; done
+          SERVER=$(jq -r .registryServer.value pass1.json)
+          docker build -t "$SERVER/kgotla:$TAG" -t "$SERVER/kgotla:latest" .
+          docker push "$SERVER/kgotla:$TAG"
+          docker push "$SERVER/kgotla:latest"
+
+      - name: Pass 2 - country apps
+        run: |
+          az deployment sub create \
+            --name "kgotla-apps-${{ github.run_number }}" \
+            --location "$LOCATION" \
+            --template-file infra/main.bicep \
+            --parameters infra/main.parameters.json \
+            --parameters location="$LOCATION" cells="$CELLS" deployApps=true imageTag="$TAG" deployerObjectId="$DEPLOYER_OID" \
+            --query properties.outputs -o json > pass2.json
+
+      - name: Smoke test each cell
+        run: |
+          set -euo pipefail
+          echo "### Kgotla cells" >> "$GITHUB_STEP_SUMMARY"
+          jq -c '.cells.value[]' pass2.json | while read -r cell; do
+            code=$(echo "$cell" | jq -r .code); url=$(echo "$cell" | jq -r .url)
+            ok=""
+            for i in $(seq 1 30); do
+              if curl -fsS "$url/health" > /dev/null 2>&1; then ok=1; break; fi
+              echo "Waiting for $code at $url ($i/30)"; sleep 10
+            done
+            [ -n "$ok" ] || { echo "::error::$code did not become healthy at $url"; exit 1; }
+            got=$(curl -fsS "$url/v1/config" | jq -r .country)
+            [ "$got" = "$code" ] || { echo "::error::$url reports country $got, expected $code"; exit 1; }
+            echo "- **$code**: $url (citizen app), $url/officer.html, $url/verify.html, $url/ussd.html" >> "$GITHUB_STEP_SUMMARY"
+            echo "$code is live at $url"
+          done

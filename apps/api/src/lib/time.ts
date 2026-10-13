@@ -1,10 +1,12 @@
-// Local time for the country cell. Botswana is UTC+2 all year (no DST).
-const OFFSET = process.env.KGOTLA_UTC_OFFSET ?? '+02:00';
-const OFFSET_MIN = (() => {
-  const m = /^([+-])(\d{2}):(\d{2})$/.exec(OFFSET);
+import { country } from '../countries/index.js';
+
+// Local time for the country cell (all Phase 1-2 countries are UTC+2, no DST).
+const offset = () => country().utcOffset;
+const offsetMinutes = () => {
+  const m = /^([+-])(\d{2}):(\d{2})$/.exec(offset());
   if (!m) return 120;
   return (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3]));
-})();
+};
 
 const WD = { en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], tn: ['Sontaga', 'Mosupologo', 'Labobedi', 'Laboraro', 'Labone', 'Labotlhano', 'Lamatlhatso'] };
 const MON = {
@@ -13,7 +15,7 @@ const MON = {
 };
 
 /** A Date shifted so its UTC fields read as local wall-clock time. */
-const local = (d: Date) => new Date(d.getTime() + OFFSET_MIN * 60_000);
+const local = (d: Date) => new Date(d.getTime() + offsetMinutes() * 60_000);
 
 export function localDate(d = new Date()): string {
   return local(d).toISOString().slice(0, 10);
@@ -33,11 +35,11 @@ export function nextWorkdays(n: number, from = new Date()): string[] {
 
 /** Combine a local date and HH:MM into an absolute instant. */
 export function slotInstant(date: string, time: string): Date {
-  return new Date(`${date}T${time}:00${OFFSET}`);
+  return new Date(`${date}T${time}:00${offset()}`);
 }
 
 export function dayLabel(d: Date | string, lang: 'en' | 'tn' = 'en'): string {
-  const x = local(typeof d === 'string' ? new Date(d.length === 10 ? d + 'T12:00:00' + OFFSET : d) : d);
+  const x = local(typeof d === 'string' ? new Date(d.length === 10 ? d + 'T12:00:00' + offset() : d) : d);
   return `${WD[lang][x.getUTCDay()]} ${x.getUTCDate()} ${MON[lang][x.getUTCMonth()]}`;
 }
 

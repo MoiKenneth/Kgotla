@@ -1,0 +1,11 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "southafricanorth" },
+    "prefix": { "value": "kgotla" },
+    "cells": { "value": ["BW"] },
+    "demoMode": { "value": true },
+    "minReplicas": { "value": 0 }
+  }
+}

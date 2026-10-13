@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import type pg from 'pg';
 import { z } from 'zod';
 import { config } from './config.js';
+import { country, publicPack } from './countries/index.js';
 import { many, one, tx } from './db.js';
 import { verifyAuditChain } from './lib/audit.js';
 import { citizenOf, createSession, officerOf, PinError, resolvePrincipal } from './lib/auth.js';
@@ -27,6 +28,7 @@ import {
   enrolmentLiveness,
   login,
   MockLiveness,
+  nationalId,
   MockRegistry,
   profile,
   startEnrolment,
@@ -83,7 +85,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         mediaSrc: ["'self'", 'blob:'],
         frameAncestors: ["'none'"],
         // Pilots run behind HTTPS; local and LAN testing over plain HTTP must not be upgraded.
-        upgradeInsecureRequests: config.production ? [] : null,
+        upgradeInsecureRequests: config.production || config.cloud ? [] : null,
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -110,6 +112,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+  // National ID in request bodies: "nationalId" (Phase 2) or "omang" (Phase 1 clients).
+  const idBody = z.object({ nationalId: z.string().optional(), omang: z.string().optional() });
+  const idOf = (b: { nationalId?: string; omang?: string }) => {
+    const v = b.nationalId ?? b.omang;
+    if (!v) throw badRequest('national_id_required', `Enter your ${country().nationalId.name}`);
+    return v;
+  };
   const body = <T extends z.ZodTypeAny>(s: T, v: unknown): z.infer<T> => s.parse(v ?? {});
 
   // -------------------------------------------------------------------------
@@ -121,16 +130,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   app.get('/v1/config', async () => ({
-    country: config.country,
-    currency: config.currency,
+    country: country().code,
+    currency: country().currency.code,
+    pack: publicPack(config.demoMode, process.env.DEMO_OFFICER_PASSWORD ? null : 'kgotla-demo'),
     demoMode: config.demoMode,
     assistant: llm ? 'claude' : 'rules',
     actions: ACTION_TYPES,
   }));
 
   app.post('/v1/enrol/start', strict, async (req) => {
-    const b = body(z.object({ omang: z.string() }), req.body);
-    return startEnrolment(pool, registry, b.omang);
+    const b = body(idBody, req.body);
+    return startEnrolment(pool, registry, idOf(b));
   });
   app.post('/v1/enrol/:id/otp', strict, async (req) => {
     const b = body(z.object({ code: z.string() }), req.body);
@@ -141,13 +151,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return enrolmentLiveness(pool, liveness, (req.params as any).id, b.selfie);
   });
   app.post('/v1/enrol/:id/complete', strict, async (req) => {
-    const b = body(z.object({ pin: z.string(), deviceLabel: z.string().max(60).optional(), lang: z.enum(['en', 'tn']).optional() }), req.body);
+    const b = body(z.object({ pin: z.string(), deviceLabel: z.string().max(60).optional(), lang: z.string().max(3).optional() }), req.body);
     return completeEnrolment(pool, registry, (req.params as any).id, b);
   });
 
   app.post('/v1/auth/login', strict, async (req) => {
-    const b = body(z.object({ omang: z.string(), pin: z.string(), deviceLabel: z.string().max(60).optional() }), req.body);
-    return login(pool, b.omang, b.pin, b.deviceLabel);
+    const b = body(idBody.extend({ pin: z.string(), deviceLabel: z.string().max(60).optional() }), req.body);
+    return login(pool, idOf(b), b.pin, b.deviceLabel);
   });
   app.post('/v1/auth/logout', async (req) => {
     const p = (req as any).principal;
@@ -169,7 +179,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Kgotla shared document</title><link rel="stylesheet" href="/share.css"></head><body><main>${inner}</main></body></html>`;
     if (!d) return page(`<h1>Link not available</h1><p>This link has expired or was withdrawn by its owner. Ask them to share it again.</p>`);
     return page(`<p class="eyebrow">Kgotla · verified document</p><h1>${esc(d.title)}</h1>
-      <dl><dt>Holder</dt><dd>${esc(d.first_name)} ${esc(d.last_name)} (Omang ***${esc(d.omang_last4)})</dd>
+      <dl><dt>Holder</dt><dd>${esc(d.first_name)} ${esc(d.last_name)} (${esc(country().nationalId.short)} ***${esc(d.omang_last4)})</dd>
       <dt>Issued by</dt><dd>${esc(d.issuer)}</dd><dt>Issued</dt><dd>${esc(dateLabel(d.issued_at))}</dd>
       ${d.valid_to ? `<dt>Valid to</dt><dd>${esc(dateLabel(d.valid_to))}</dd>` : ''}${d.ref ? `<dt>Reference</dt><dd>${esc(d.ref)}</dd>` : ''}</dl>
       <p class="ok">Issued directly by ${esc(d.issuer)} into the holder's Kgotla Vault. This link expires ${esc(new Date(d.expires_at).toUTCString())}.</p>`);
@@ -215,7 +225,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   app.patch('/v1/me', async (req) => {
     const id = citizenOf(req);
-    const b = body(z.object({ lang: z.enum(['en', 'tn']) }), req.body);
+    const b = body(z.object({ lang: z.string().max(3) }), req.body);
+    if (!country().languages.some((l) => l.code === b.lang)) throw badRequest('unsupported_language', `Available: ${country().languages.map((l) => l.name).join(', ')}`);
     await pool.query('UPDATE citizens SET lang = $2 WHERE id = $1', [id, b.lang]);
     return { ok: true };
   });
@@ -287,7 +298,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/v1/assistant', { config: { rateLimit: { max: 20, timeWindow: '1 minute' } } }, async (req) => {
     const id = citizenOf(req);
     const b = body(
-      z.object({ messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1).max(40), lang: z.enum(['en', 'tn']).default('en') }),
+      z.object({ messages: z.array(z.object({ role: z.enum(['user', 'assistant']), content: z.string().max(4000) })).min(1).max(40), lang: z.string().max(3).default('en') }),
       req.body,
     );
     return assistantReply(pool, ctx, llm, id, b.messages, b.lang);
@@ -302,11 +313,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const iss = await one<any>(pool, 'SELECT id, api_key_hash FROM issuers WHERE id = $1', [issuerId]);
     if (!iss || !key || !(await verifySecret(key, iss.api_key_hash))) throw unauthorized('Unknown issuer or key');
     const b = body(
-      z.object({ omang: z.string(), type: z.string().min(2).max(40), title: z.string().min(2).max(120), ref: z.string().max(60).optional(), validTo: z.string().optional(), data: z.record(z.any()).optional() }),
+      idBody.extend({ type: z.string().min(2).max(40), title: z.string().min(2).max(120), ref: z.string().max(60).optional(), validTo: z.string().optional(), data: z.record(z.any()).optional() }),
       req.body,
     );
-    const c = await one<any>(pool, 'SELECT id FROM citizens WHERE omang_hash = $1', [hashIdentifier(b.omang.replace(/\s+/g, ''))]);
-    if (!c) throw notFound('No Kgotla account for that Omang');
+    const c = await one<any>(pool, 'SELECT id FROM citizens WHERE omang_hash = $1', [hashIdentifier(nationalId(idOf(b)))]);
+    if (!c) throw notFound(`No Kgotla account for that ${country().nationalId.name}`);
     const docId = await tx(pool, (db) =>
       issueDocument(db, c.id, { type: b.type, title: b.title, issuerId: iss.id, ref: b.ref, validTo: b.validTo ? new Date(b.validTo) : null, data: b.data }, `issuer:${iss.id}`),
     );

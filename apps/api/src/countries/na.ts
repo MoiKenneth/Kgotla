@@ -1,0 +1,113 @@
+import { digits, licenceSteps, validYYMMDD, type CountryPack } from './types.js';
+
+/** Namibia: Phase 2 cell. Fees are demo values. */
+export const NA: CountryPack = {
+  code: 'NA',
+  name: 'Namibia',
+  possessive: "Namibia's",
+  phase: 2,
+  currency: { code: 'NAD', symbol: 'N$', minorName: 'cents' },
+  utcOffset: '+02:00',
+  languages: [{ code: 'en', name: 'English' }],
+  plannedLanguages: ['Oshiwambo', 'Afrikaans', 'Otjiherero', 'Khoekhoegowab'],
+  nationalId: {
+    name: 'ID number',
+    short: 'NA ID',
+    documentTitle: 'Namibian ID card',
+    example: '89031400123',
+    inputMode: 'numeric',
+    maxLength: 13,
+    error: 'A Namibian ID number has 11 digits, starting with the date of birth (YYMMDD)',
+    hashPrefix: 'na-id:',
+    normalise: (raw) => {
+      const d = digits(raw);
+      return /^\d{11}$/.test(d) && validYYMMDD(d.slice(0, 6)) ? d : null;
+    },
+    display: (id) => `${id.slice(0, 6)} ${id.slice(6)}`,
+  },
+  phone: { cc: '264', nsn: 9, trunk: true, example: '081 123 4567' },
+  ussdCode: '*321#',
+  agencies: {
+    licence: { code: 'NATIS', name: 'NaTIS (Roads Authority)' },
+    civil: { code: 'MHAISS', name: 'Ministry of Home Affairs, Immigration, Safety and Security' },
+    tax: { code: 'NAMRA', name: 'Namibia Revenue Agency' },
+    immigration: { code: 'MHAISS', name: 'Ministry of Home Affairs, Immigration, Safety and Security' },
+    health: { code: 'MOHSS', name: 'Ministry of Health and Social Services' },
+    exams: { code: 'DNEA', name: 'Directorate of National Examinations and Assessment' },
+  },
+  licence: { classWord: 'Code', collectAt: 'NaTIS · Windhoek' },
+  services: [
+    {
+      code: 'driver_licence_renewal',
+      name: 'Driving licence card renewal',
+      agency: 'NATIS',
+      fee: 18000,
+      steps: licenceSteps('NaTIS'),
+      output: { type: 'driver_licence', title: 'Driving licence · Code {licence_class}', issuer: 'NATIS', validYears: 5 },
+    },
+    {
+      code: 'birth_certificate_copy',
+      name: 'Birth certificate copy',
+      agency: 'MHAISS',
+      fee: 1500,
+      steps: [
+        { key: 'submitted', label: 'Submitted' },
+        { key: 'processing', label: 'Being processed by Home Affairs' },
+        { key: 'issued', label: 'Copy issued to your Vault' },
+      ],
+      output: { type: 'birth_certificate', title: 'Birth certificate · {name}', issuer: 'MHAISS' },
+    },
+    {
+      code: 'tax_clearance',
+      name: 'Certificate of good standing',
+      agency: 'NAMRA',
+      fee: 0,
+      steps: [{ key: 'issued', label: 'Certificate issued to your Vault' }],
+      output: { type: 'tax_clearance', title: 'Certificate of good standing (NamRA)', issuer: 'NAMRA', validDays: 90 },
+    },
+  ],
+  billers: [
+    { id: 'cowelec', name: 'City of Windhoek prepaid electricity', short: 'CoW electricity', category: 'electricity', refLabel: 'Meter number', refPattern: '^\\d{11,13}$', placeholder: '0412 7788 3301' },
+    { id: 'cowwater', name: 'City of Windhoek water', short: 'CoW water', category: 'water', refLabel: 'Account number', refPattern: '^\\d{6,10}$', placeholder: '30219844' },
+    { id: 'mtc', name: 'MTC', short: 'MTC', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'tnmobile', name: 'TN Mobile', short: 'TN Mobile', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+    { id: 'paratus', name: 'Paratus', short: 'Paratus', category: 'airtime', refLabel: 'Phone number', refPattern: '.*', placeholder: '' },
+  ],
+  topUpSources: [
+    { id: 'mtc_maris', name: 'MTC Maris' },
+    { id: 'bank', name: 'Bank transfer' },
+  ],
+  locations: [
+    { id: 'na-eye-whk', kind: 'eye_test', name: 'NaTIS eye test · Windhoek', agency: 'NATIS', capacity: 3, slots: ['08:00', '09:30', '11:00', '14:00'], services: [], counters: 1 },
+    { id: 'na-eye-osh', kind: 'eye_test', name: 'NaTIS eye test · Oshakati', agency: 'NATIS', capacity: 2, slots: ['08:30', '10:30', '14:30'], services: [], counters: 1 },
+    { id: 'na-clinic-katutura', kind: 'clinic', name: 'Clinic · Katutura', agency: 'MOHSS', capacity: 4, slots: ['08:00', '09:00', '10:00', '14:00'], services: [], counters: 1 },
+    { id: 'na-clinic-khomasdal', kind: 'clinic', name: 'Clinic · Khomasdal', agency: 'MOHSS', capacity: 3, slots: ['08:00', '09:30', '11:00', '14:30'], services: [], counters: 1 },
+    { id: 'na-clinic-oshakati', kind: 'clinic', name: 'Clinic · Oshakati', agency: 'MOHSS', capacity: 3, slots: ['08:00', '09:00', '10:30', '14:00'], services: [], counters: 1 },
+    { id: 'na-pp-whk', kind: 'passport', name: 'Home Affairs · Windhoek', agency: 'MHAISS', capacity: 3, slots: ['08:00', '09:30', '11:00', '14:00'], services: [], counters: 1 },
+    { id: 'na-pp-osh', kind: 'passport', name: 'Home Affairs · Oshakati', agency: 'MHAISS', capacity: 2, slots: ['08:30', '10:30', '14:30'], services: [], counters: 1 },
+    { id: 'na-natis-whk', kind: 'office', name: 'NaTIS · Windhoek', agency: 'NATIS', capacity: 1, slots: [], services: ['Licence card collection', 'Vehicle registration'], counters: 4 },
+    { id: 'na-ha-whk', kind: 'office', name: 'Home Affairs · Windhoek', agency: 'MHAISS', capacity: 1, slots: [], services: ['ID card application', 'Birth registration'], counters: 4 },
+    { id: 'na-namra-whk', kind: 'office', name: 'NamRA · Windhoek', agency: 'NAMRA', capacity: 1, slots: [], services: ['Tax returns', 'Good standing'], counters: 3 },
+    { id: 'na-rc-osh', kind: 'office', name: 'Regional Council · Oshana', agency: 'RC', capacity: 1, slots: [], services: ['General enquiry', 'Land matters'], counters: 1 },
+  ],
+  limits: { transferMax: 500000, billMin: 1000, airtimeMin: 500, airtimeMax: 50000, topUpMax: 1000000, demoCredit: 250000 },
+  chips: { send: [50, 100, 200, 500], bills: [100, 200, 300, 500], airtime: [10, 20, 50, 100], topup: [100, 250, 500, 1000] },
+  demo: {
+    meter: '04127788330',
+    people: [
+      { id: '89031400123', first: 'Ndapewa', last: 'Shikongo', dob: '1989-03-14', sex: 'F', district: 'Windhoek', phone: '+264811234558', licenceClass: 'B', licenceDays: 30, taxCompliant: true, pin: '2580' },
+      { id: '92071100456', first: 'Tangeni', last: 'Amupolo', dob: '1992-07-11', sex: 'M', district: 'Oshakati', phone: '+264812345614', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1357' },
+      { id: '96022800789', first: 'Jacques', last: 'Engelbrecht', dob: '1996-02-28', sex: 'M', district: 'Swakopmund', phone: '+264853456630', licenceClass: 'B', licenceDays: 900, taxCompliant: true, pin: '2468' },
+      { id: '71120500234', first: 'Selma', last: 'Nangolo', dob: '1971-12-05', sex: 'F', district: 'Rundu', phone: '+264814567702', licenceClass: null, licenceDays: null, taxCompliant: true, pin: '1470' },
+      { id: '01050900567', first: 'Hileni', last: 'Iipumbu', dob: '2001-05-09', sex: 'F', district: 'Windhoek', phone: '+264815567811', licenceClass: 'B', licenceDays: 400, taxCompliant: false },
+      { id: '86081200891', first: 'Petrus', last: 'Kambonde', dob: '1986-08-12', sex: 'M', district: 'Walvis Bay', phone: '+264856678922', licenceClass: 'C', licenceDays: 1200, taxCompliant: true },
+    ],
+    officers: [
+      { username: 'natis.case', name: 'Martha Haufiku', agency: 'NATIS', role: 'caseworker' },
+      { username: 'mhaiss.case', name: 'Johannes Shilongo', agency: 'MHAISS', role: 'caseworker' },
+      { username: 'namra.case', name: 'Elize Coetzee', agency: 'NAMRA', role: 'caseworker' },
+      { username: 'natis.counter', name: 'Linus Haimbodi', agency: 'NATIS', role: 'counter' },
+      { username: 'admin', name: 'Kgotla Operations', agency: 'KGOTLA', role: 'admin' },
+    ],
+  },
+};

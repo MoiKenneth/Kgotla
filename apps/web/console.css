@@ -33,8 +33,8 @@ button,input,select,textarea{font:inherit;color:inherit}
 .top{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:14px;padding-block:18px;border-bottom:2px solid var(--ink);flex-wrap:wrap}
 .top h1{font:800 26px var(--display);margin:0;letter-spacing:-.01em;flex:1;min-width:0}
 .top .who{font-size:13px;color:var(--muted)}
-.mini-flag{display:grid;grid-template-rows:5fr 1fr 2fr 1fr 5fr;width:30px;height:21px;border-radius:3px;overflow:hidden}
-.mini-flag i:nth-child(1),.mini-flag i:nth-child(5){background:#2f7fb8}.mini-flag i:nth-child(2),.mini-flag i:nth-child(4){background:#ffffff}.mini-flag i:nth-child(3){background:#0f1720}
+.mini-flag{display:inline-block;width:30px;height:20px;border-radius:3px;overflow:hidden;flex:none;box-shadow:0 0 0 1px var(--line)}
+.mini-flag svg{display:block;width:100%;height:100%}
 main{max-width:1180px;margin:0 auto;padding-block:20px;display:grid;gap:18px}
 .tabs{display:flex;gap:6px;flex-wrap:wrap}
 .tabs button{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:7px 14px;font-weight:600;font-size:13.5px;color:var(--muted);cursor:pointer}

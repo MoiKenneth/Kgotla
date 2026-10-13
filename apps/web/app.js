@@ -9,9 +9,11 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
     del(k) { try { localStorage.removeItem(k); } catch (e) {} },
   };
-  const money = (t) => { const n = Number(t) || 0; const a = Math.abs(n); return (n < 0 ? '−' : '') + 'P ' + Math.floor(a / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + String(a % 100).padStart(2, '0'); };
-  // Botswana local time (UTC+2, no DST).
-  const loc = (x) => new Date(new Date(x).getTime() + 2 * 3600e3);
+  // The cell's country pack (currency, ID rules, billers, flag …) from /v1/config, cached for offline use.
+  const PK = () => (S.cfg && S.cfg.pack) || FALLBACK_PACK;
+  const money = (t) => { const n = Number(t) || 0; const a = Math.abs(n); return (n < 0 ? '−' : '') + PK().currency.symbol + '\u00a0' + Math.floor(a / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + String(a % 100).padStart(2, '0'); };
+  // Cell local time (all Phase 1–2 countries are UTC+2, no DST).
+  const loc = (x) => new Date(new Date(x).getTime() + PK().utcOffsetMinutes * 60e3);
   const MON = { en: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], tn: ['Ferikgong', 'Tlhakole', 'Mopitlo', 'Moranang', 'Motsheganong', 'Seetebosigo', 'Phukwi', 'Phatwe', 'Lwetse', 'Diphalane', 'Ngwanatsele', 'Sedimonthole'] };
   const WD = { en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'], tn: ['Sontaga', 'Mosupologo', 'Labobedi', 'Laboraro', 'Labone', 'Labotlhano', 'Lamatlhatso'] };
   const fd = (x) => { const d = loc(x); return `${d.getUTCDate()} ${MON[S.lang][d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
@@ -32,6 +34,13 @@
     clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M12 7v5l3 2', face: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M9 10h.01 M15 10h.01 M8.5 14.5c1 1.3 2.2 2 3.5 2s2.5-.7 3.5-2', users: 'M9 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6z M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6 M16 4a3 3 0 0 1 0 6 M18 14c2 .8 3 3 3 6',
     lang: 'M4 5h9 M8.5 3v2 M6 5c.8 3.5 3 6 6 7.5 M11 5c-.8 3.5-3 6-6 7.5 M13 20l4-9 4 9 M14.5 17h5', out: 'M15 4h4v16h-4 M10 8l-4 4 4 4 M6 12h10',
   };
+  /** Used only until /v1/config has loaded once (first ever open, offline). */
+  const FALLBACK_PACK = {
+    code: 'BW', name: 'Botswana', currency: { code: 'BWP', symbol: 'P' }, utcOffsetMinutes: 120, languages: [{ code: 'en', name: 'English' }], plannedLanguages: [],
+    nationalId: { name: 'ID number', short: 'ID', example: '', inputMode: 'text', maxLength: 16 }, phone: { cc: '', example: '' }, ussdCode: '*321#',
+    agencies: { licence: { code: '', name: '' }, civil: { code: '', name: '' }, tax: { code: '', name: '' } }, licence: { classWord: 'Class', collectAt: '' },
+    billers: [], topUpSources: [], chips: { send: [], bills: [], airtime: [], topup: [] }, demo: null,
+  };
   const ic = (n, s = 20, cls = '') => `<svg class="ic ${cls}" viewBox="0 0 24 24" width="${s}" height="${s}" aria-hidden="true"><path d="${P[n] || ''}"/></svg>`;
 
   // ------------------------------------------------------------------ state
@@ -48,9 +57,15 @@
     readAloud: store.get('kg.read') === '1',
   };
   try { S.me = JSON.parse(store.get('kg.me') || 'null'); } catch (e) {}
+  try { S.cfg = JSON.parse(store.get('kg.cfg') || 'null'); } catch (e) {}
   try { S.chat = JSON.parse(sessionStorage.getItem('kg.chat') || '[]'); } catch (e) {}
   const UI = { sheet: null, toast: null, busy: false, typing: false, listening: false };
-  const t = (k, v) => { let s = (D[S.lang] && D[S.lang][k]) || D.en[k] || k; if (v) for (const x in v) s = s.split('{' + x + '}').join(v[x]); return s; };
+  /** Cell-wide words for the copy: ID name, agencies, USSD code. */
+  const GLOBALS = () => { const p = PK(); return { idName: p.nationalId.name, idShort: p.nationalId.short, lic: p.agencies.licence.code, tax: p.agencies.tax.code, civil: p.agencies.civil.name, ussd: p.ussdCode, cur: p.currency.symbol, curCode: p.currency.code, country: p.name }; };
+  const t = (k, v) => { let s = (D[S.lang] && D[S.lang][k]) || D.en[k] || k; const all = Object.assign(GLOBALS(), v || {}); for (const x in all) s = s.split('{' + x + '}').join(all[x]); return s; };
+  /** Language buttons for the languages this cell's app is translated into. */
+  const langPills = (cls) => { const ls = PK().languages; return ls.length < 2 ? '' : ls.map((l) => `<button class="${cls}" aria-pressed="${S.lang === l.code}" data-a="lang" data-val="${l.code}">${cls === 'pill' ? esc(l.name) : esc(l.code.toUpperCase())}</button>`).join(''); };
+  const flag = () => window.kgotlaFlag ? window.kgotlaFlag(PK().code) : '';
   const cur = () => S.stack[S.stack.length - 1] || { v: 'welcome', p: {} };
 
   // ------------------------------------------------------------------ API
@@ -136,6 +151,8 @@
   const txRow = (x) => `<div class="row">${ic(x.amount > 0 ? 'down' : 'send', 20, 'lead')}<span class="main"><b>${esc(x.title)}</b><small>${esc(ago(x.at))}</small></span><span class="val ${x.amount > 0 ? 'in' : ''}">${x.amount > 0 ? '+' : ''}${money(x.amount)}</span></div>`;
   const readbackHtml = (rows) => `<div class="readback">${rows.map(([a, b]) => `<div class="rb"><span>${esc(a)}</span><span>${esc(b)}</span></div>`).join('')}</div>`;
   const stepLabel = (s) => (S.lang === 'tn' && s.label_tn) || s.label;
+  /** National ID field shaped by this cell's rules (digits only, or letters and slashes). */
+  const idInput = (p, ac) => { const n = PK().nationalId; return `<input id="omang" class="big mono" inputmode="${n.inputMode}" autocomplete="${ac}" autocapitalize="characters" maxlength="${n.maxLength}" placeholder="${esc(n.example)}" value="${esc(p.omang || '')}">`; };
   const btn = (label, a, extra, cls) => `<button class="btn ${cls || ''}" data-a="${a}" ${extra || ''} ${UI.busy ? 'disabled' : ''}>${label}</button>`;
   const loading = () => `<div class="skeleton"></div><div class="skeleton"></div>`;
   const onceLoad = (p, key, fn) => { if (!p[key + '_state']) { p[key + '_state'] = 'loading'; fn().then((v) => { p[key] = v; p[key + '_state'] = 'ok'; render(); }).catch((e) => { p[key + '_state'] = 'error'; p[key + '_error'] = e.message; render(); }); } return p[key + '_state'] === 'ok'; };
@@ -145,9 +162,9 @@
 
   // ---- signed out
   V.welcome = () => ({
-    raw: `<div class="ob"><div class="flagbar"><i></i><i></i><i></i><i></i><i></i></div>
+    raw: `<div class="ob"><div class="flagbar" title="${esc(PK().name)}">${flag()}</div>
       <h2>${t('welcomeT')}</h2><p>${t('welcomeB')}</p><div class="grow"></div>
-      <div class="field"><label>${t('chooseLang')}</label><div class="pills"><button class="pill" aria-pressed="${S.lang === 'en'}" data-a="lang" data-val="en">English</button><button class="pill" aria-pressed="${S.lang === 'tn'}" data-a="lang" data-val="tn">Setswana</button></div></div>
+      ${PK().languages.length > 1 ? `<div class="field"><label>${t('chooseLang')}</label><div class="pills">${langPills('pill')}</div></div>` : ''}
       <button class="btn sky" data-a="go" data-v="enrol">${t('createAccount')}</button>
       <button class="btn ghost" data-a="go" data-v="login">${t('signIn')}</button>
       <p class="hint center">${t('ussdHint')}</p></div>`,
@@ -159,10 +176,10 @@
     return {
       raw: `<div class="ob"><button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button>
         <h2>${t('signIn')}</h2><p>${t('signInB')}</p>
-        <div class="field"><label for="omang">${t('omang')}</label><input id="omang" class="big mono" inputmode="numeric" autocomplete="username" maxlength="11" value="${esc(p.omang || '')}"></div>
+        <div class="field"><label for="omang">${t('omang')}</label>${idInput(p, 'username')}</div>
         <div class="pindots" aria-label="${t('pin')}">${[0, 1, 2, 3].map((i) => `<i class="${p.pin.length > i ? 'on' : ''}"></i>`).join('')}</div>
         ${p.error ? `<p class="err center">${esc(p.error)}</p>` : ''}
-        ${demo ? `<div class="demo-box">Demo: Omang <b>435721904</b> · PIN <b>2580</b> (Naledi Mothibi)</div>` : ''}
+        ${demo && PK().demo ? `<div class="demo-box">${PK().demo.citizens.slice(0, 2).map((c) => `Demo: ${esc(PK().nationalId.short)} <b>${esc(c.id)}</b> · PIN <b>${esc(c.pin)}</b> (${esc(c.name)})`).join('<br>')}</div>` : ''}
         <div class="grow"></div>
         <div class="pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, '', 0, '⌫'].map((k) => (k === '' ? '<span></span>' : `<button data-a="loginKey" data-val="${k}">${k}</button>`)).join('')}</div></div>`,
     };
@@ -173,7 +190,7 @@
     const bar = `<div class="obsteps">${['omang', 'otp', 'face', 'pin', 'done'].map((s, i, a) => `<i class="${i <= a.indexOf(p.step) ? 'on' : ''}"></i>`).join('')}</div>`;
     const head = `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button>${bar}`;
     const err = p.error ? `<p class="err">${esc(p.error)}</p>` : '';
-    if (p.step === 'omang') return { raw: `<div class="ob">${head}<h2>${t('ob2T')}</h2><p>${t('ob2B')}</p><div class="field"><label for="omang">${t('omang')}</label><input id="omang" class="big mono" inputmode="numeric" maxlength="11" value="${esc(p.omang || '')}"></div>${err}${S.cfg && S.cfg.demoMode ? `<div class="demo-box">Demo: try <b>341926728</b> (Onkemetse) or <b>778215043</b> (Tumelo)</div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolStart', '', 'sky')}</div>` };
+    if (p.step === 'omang') return { raw: `<div class="ob">${head}<h2>${t('ob2T')}</h2><p>${t('ob2B')}</p><div class="field"><label for="omang">${t('omang')}</label>${idInput(p, 'off')}</div>${err}${S.cfg && S.cfg.demoMode && PK().demo ? `<div class="demo-box">Demo: try ${PK().demo.signups.map((x) => `<b>${esc(x.id)}</b> (${esc(x.name.split(' ')[0])})`).join(' or ')}</div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolStart', '', 'sky')}</div>` };
     if (p.step === 'otp') return { raw: `<div class="ob">${head}<h2>${t('otpT')}</h2><p>${t('otpB', { p: esc(p.phoneMasked) })}</p><div class="field"><input id="otp" class="big mono" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></div>${err}${p.demoOtp ? `<div class="demo-box">${t('demoCode')}: <b>${esc(p.demoOtp)}</b></div>` : ''}<div class="grow"></div>${btn(t('cont'), 'enrolOtp', '', 'sky')}</div>` };
     if (p.step === 'face') {
       return {
@@ -236,9 +253,9 @@
     const u = m.profile;
     return {
       title: t('id'),
-      body: `<div class="idcard"><div class="stripe"><i></i><i></i><i></i><i></i><i></i></div>
+      body: `<div class="idcard"><div class="stripe" style="background:${window.kgotlaBands ? window.kgotlaBands(PK().code) : 'var(--sky)'}"></div>
         <div class="body"><div class="avatar">${esc(u.firstName[0])}${esc(u.lastName[0])}</div>
-        <dl><dt>${t('fName')}</dt><dd>${esc(u.firstName + ' ' + u.lastName)}</dd><dt>Omang</dt><dd class="mono">••••• ${esc(u.omangLast4)}</dd><dt>${t('fDob')}</dt><dd>${fd(u.dob + 'T12:00:00Z')}</dd><dt>${t('fAddr')}</dt><dd>${esc(u.district)}</dd></dl></div>
+        <dl><dt>${t('fName')}</dt><dd>${esc(u.firstName + ' ' + u.lastName)}</dd><dt>${esc(PK().nationalId.short)}</dt><dd class="mono">••••• ${esc(u.idLast4 || u.omangLast4)}</dd><dt>${t('fDob')}</dt><dd>${fd(u.dob + 'T12:00:00Z')}</dd><dt>${t('fAddr')}</dt><dd>${esc(u.district)}</dd></dl></div>
         <div class="foot"><span style="display:flex;gap:6px;align-items:center;color:var(--good)">${ic('shield', 16)} ${t('verified')}</span><span class="chip">${esc(t('loa', { n: u.loa }))}</span></div></div>
         <button class="btn" data-a="go" data-v="idShare" data-k="full">${ic('qr', 18)} ${t('showQR')}</button>
         <button class="btn ghost" data-a="go" data-v="idShare" data-k="pick">${ic('share', 18)} ${t('shareSel')}</button>
@@ -246,10 +263,10 @@
         <div class="list">${m.disclosures.length ? m.disclosures.map((d) => `<div class="row">${ic('users', 20, 'lead')}<span class="main"><b>${esc(d.audience)}</b><small>${esc(d.claims.map(claimName).join(', '))} · ${esc(ago(d.created_at))}${d.verified_at ? ' · ✓' : ''}</small></span></div>`).join('') : `<div class="row"><span class="main"><small>${t('noneYet')}</small></span></div>`}</div>`,
     };
   };
-  const CLAIMS = [['name', 'fName'], ['photo', 'fPhoto'], ['dob', 'fDob'], ['over18', 'fOver18'], ['district', 'fAddr'], ['omang_last4', 'fOmang']];
+  const CLAIMS = [['name', 'fName'], ['photo', 'fPhoto'], ['dob', 'fDob'], ['over18', 'fOver18'], ['district', 'fAddr'], ['id_last4', 'fOmang']];
   const claimName = (c) => t((CLAIMS.find((x) => x[0] === c) || [c, c])[1]);
   V.idShare = (p) => {
-    if (!p.fields) p.fields = p.k === 'full' ? { name: 1, photo: 1, omang_last4: 1 } : p.k === 'over18' ? { over18: 1 } : { name: 1, over18: 1 };
+    if (!p.fields) p.fields = p.k === 'full' ? { name: 1, photo: 1, id_last4: 1 } : p.k === 'over18' ? { over18: 1 } : { name: 1, over18: 1 };
     let body = `<div class="list">${CLAIMS.map(([k, l]) => `<button class="toggle" role="switch" aria-checked="${p.fields[k] ? 'true' : 'false'}" data-a="fieldToggle" data-k="${k}"><span class="main"><b style="font-weight:600;font-size:14px">${t(l)}</b></span><span class="sw"></span></button>`).join('')}</div>`;
     if (p.code) {
       const left = Math.max(0, Math.ceil((new Date(p.code.expiresAt) - Date.now()) / 1000));
@@ -305,40 +322,44 @@
         <h3 class="sec">${t('allTx')}</h3><div class="list">${m.transactions.map(txRow).join('') || `<div class="row"><span class="main"><small>${t('noneYet')}</small></span></div>`}</div>`,
     };
   };
-  const amountField = (p, chips) => `<div class="field"><label for="amt">${t('amount')}</label><input id="amt" class="big" inputmode="decimal" value="${esc(p.amt || '')}" placeholder="0.00"></div><div class="pills">${chips.map((v) => `<button class="pill" data-a="setAmt" data-val="${v}">P${v}</button>`).join('')}</div>`;
+  const amountField = (p, chips) => `<div class="field"><label for="amt">${t('amount')}</label><input id="amt" class="big" inputmode="decimal" value="${esc(p.amt || '')}" placeholder="0.00"></div><div class="pills">${chips.map((v) => `<button class="pill" data-a="setAmt" data-val="${v}">${esc(PK().currency.symbol)}${v}</button>`).join('')}</div>`;
   V.send = (p) => {
     const ok = onceLoad(p, 'contacts', () => api('GET', '/v1/me/contacts'));
     return {
       title: t('send'),
       body: `<h3 class="sec">${t('recipient')}</h3>${ok ? `<div style="display:grid;gap:8px">${p.contacts.map((c) => `<button class="opt" aria-pressed="${p.to === c.phone}" data-a="pick" data-f="to" data-val="${esc(c.phone)}">${ic('person', 20)}<span class="main"><b>${esc(c.name)}</b><small>${esc(c.phone)}</small></span></button>`).join('')}</div>` : loading()}
         <div class="field"><label for="toNum">${t('orNumber')}</label><input id="toNum" inputmode="tel" placeholder="71 234 567" value="${p.to && !(p.contacts || []).some((c) => c.phone === p.to) ? esc(p.to) : ''}"></div>
-        ${amountField(p, [50, 100, 200, 500])}${btn(t('review'), 'sendReview')}`,
+        ${amountField(p, PK().chips.send)}${btn(t('review'), 'sendReview')}`,
     };
   };
   V.bills = (p) => {
-    p.biller = p.biller || 'bpc';
+    const billers = PK().billers.filter((b) => b.category !== 'airtime');
+    if (!billers.some((b) => b.id === p.biller)) p.biller = billers[0].id;
+    const b = billers.find((x) => x.id === p.biller);
     return {
       title: t('bills'),
-      body: `<div style="display:grid;gap:8px">${[['bpc', 'BPC prepaid electricity', 'bolt'], ['wuc', 'Water Utilities Corporation', 'drop']].map(([id, n, i]) => `<button class="opt" aria-pressed="${p.biller === id}" data-a="pick" data-f="biller" data-val="${id}">${ic(i, 20)}<span class="main"><b>${n}</b></span></button>`).join('')}</div>
-        <div class="field"><label for="bref">${p.biller === 'bpc' ? t('meter') : t('account')}</label><input id="bref" class="mono" value="${esc(p.ref || '')}" placeholder="${p.biller === 'bpc' ? '0412 778 8330' : 'WUC-118-40291'}"></div>
-        ${amountField(p, [100, 200, 300, 500])}${btn(t('review'), 'billReview')}`,
+      body: `<div style="display:grid;gap:8px">${billers.map((x) => `<button class="opt" aria-pressed="${p.biller === x.id}" data-a="pick" data-f="biller" data-val="${x.id}">${ic(x.category === 'electricity' ? 'bolt' : 'drop', 20)}<span class="main"><b>${esc(x.name)}</b></span></button>`).join('')}</div>
+        <div class="field"><label for="bref">${esc(b.refLabel)}</label><input id="bref" class="mono" value="${esc(p.ref || '')}" placeholder="${esc(b.placeholder)}"></div>
+        ${amountField(p, PK().chips.bills)}${btn(t('review'), 'billReview')}`,
     };
   };
   V.airtime = (p) => {
-    p.net = p.net || 'orange';
+    const nets = PK().billers.filter((b) => b.category === 'airtime');
+    if (!nets.some((n) => n.id === p.net)) p.net = nets[0].id;
     return {
       title: t('airtime'),
-      body: `<div class="field"><label>${t('network')}</label><div class="pills">${[['mascom', 'Mascom'], ['orange', 'Orange'], ['btc', 'BTC']].map(([k, n]) => `<button class="pill" aria-pressed="${p.net === k}" data-a="pick" data-f="net" data-val="${k}">${n}</button>`).join('')}</div></div>
+      body: `<div class="field"><label>${t('network')}</label><div class="pills">${nets.map((n) => `<button class="pill" aria-pressed="${p.net === n.id}" data-a="pick" data-f="net" data-val="${n.id}">${esc(n.name)}</button>`).join('')}</div></div>
         <div class="opt" aria-pressed="true">${ic('phone', 20)}<span class="main"><b>${t('myNumber')}</b><small>${esc(S.me ? S.me.profile.phoneMasked : '')}</small></span></div>
-        ${amountField(p, [10, 20, 50, 100])}${btn(t('review'), 'airReview')}`,
+        ${amountField(p, PK().chips.airtime)}${btn(t('review'), 'airReview')}`,
     };
   };
   V.topup = (p) => {
-    p.src = p.src || 'orange_money';
+    const sources = PK().topUpSources;
+    if (!sources.some((x) => x.id === p.src)) p.src = sources[0].id;
     return {
       title: t('topup'),
-      body: `<div class="field"><label>${t('source')}</label><div style="display:grid;gap:8px">${[['orange_money', 'Orange Money'], ['myzaka', 'MyZaka']].map(([k, n]) => `<button class="opt" aria-pressed="${p.src === k}" data-a="pick" data-f="src" data-val="${k}">${ic('phone', 20)}<span class="main"><b>${n}</b></span></button>`).join('')}</div></div>
-        ${amountField(p, [100, 250, 500, 1000])}${btn(t('review'), 'topReview')}`,
+      body: `<div class="field"><label>${t('source')}</label><div style="display:grid;gap:8px">${sources.map((x) => `<button class="opt" aria-pressed="${p.src === x.id}" data-a="pick" data-f="src" data-val="${x.id}">${ic('phone', 20)}<span class="main"><b>${esc(x.name)}</b></span></button>`).join('')}</div></div>
+        ${amountField(p, PK().chips.topup)}${btn(t('review'), 'topReview')}`,
     };
   };
 
@@ -382,8 +403,8 @@
         <h3 class="sec">${t('pickSlot')}</h3>${slots}${btn(t('cont'), 'licReview', p.slot ? '' : 'disabled')}`,
     };
   };
-  V.tax = () => ({ title: t('sTax'), body: `<div class="card"><b>${t('sTax')}</b><p style="font-size:13px;color:var(--muted)">${S.lang === 'tn' ? 'BURS e tlhola rekoto ya gago. Ga go tuelo.' : 'BURS checks your record. Free, valid 90 days, delivered to your Vault.'}</p></div>${btn(t('cont'), 'prep', 'data-k="tax_clearance"')}` });
-  V.birth = () => ({ title: t('sBirth'), body: `<div class="card"><b>${t('sBirth')}</b><p style="font-size:13px;color:var(--muted)">${S.lang === 'tn' ? 'Kopi ya dijitale e tla mo Polokelong.' : 'A digital copy from Civil & National Registration, delivered to your Vault.'}</p></div>${btn(t('cont'), 'prep', 'data-k="birth_certificate"')}` });
+  V.tax = () => ({ title: t('sTax'), body: `<div class="card"><b>${t('sTax')}</b><p style="font-size:13px;color:var(--muted)">${t('taxB')}</p></div>${btn(t('cont'), 'prep', 'data-k="tax_clearance"')}` });
+  V.birth = () => ({ title: t('sBirth'), body: `<div class="card"><b>${t('sBirth')}</b><p style="font-size:13px;color:var(--muted)">${t('birthB')}</p></div>${btn(t('cont'), 'prep', 'data-k="birth_certificate"')}` });
   V.booking = (p) => {
     const kind = p.k === 'passport' ? 'passport' : 'clinic';
     const ok = onceLoad(p, 'locs', async () => {
@@ -444,7 +465,8 @@
   V.settings = () => ({
     title: t('settings'),
     body: `<div class="list">
-      <div class="row">${ic('lang', 20, 'lead')}<span class="main"><b>${t('lang')}</b></span><span class="seg"><button aria-pressed="${S.lang === 'en'}" data-a="lang" data-val="en">EN</button><button aria-pressed="${S.lang === 'tn'}" data-a="lang" data-val="tn">TN</button></span></div>
+      ${PK().languages.length > 1 ? `<div class="row">${ic('lang', 20, 'lead')}<span class="main"><b>${t('lang')}</b></span><span class="seg">${langPills('')}</span></div>` : ''}
+      <div class="row">${ic('id', 20, 'lead')}<span class="main"><b>${esc(PK().name)}</b><small>${esc(PK().currency.code)} · ${esc(PK().languages.map((l) => l.name).join(', '))}${PK().plannedLanguages.length ? ` · ${S.lang === 'tn' ? 'e tla' : 'coming'}: ${esc(PK().plannedLanguages.join(', '))}` : ''}</small></span></div>
       <button class="toggle" role="switch" aria-checked="${S.dataSaver}" data-a="toggle" data-k="dataSaver"><span class="main"><b style="font-weight:600;font-size:14px">${t('dataSaver')}</b><small>${t('dataSaverB')}</small></span><span class="sw"></span></button>
       ${'speechSynthesis' in window ? `<button class="toggle" role="switch" aria-checked="${S.readAloud}" data-a="toggle" data-k="readAloud"><span class="main"><b style="font-weight:600;font-size:14px">${t('readAloud')}</b></span><span class="sw"></span></button>` : ''}
       </div>
@@ -466,6 +488,12 @@
           ${m.actions && m.actions.length ? `<div class="acts">${m.actions.map((a, j) => `<button class="primary" data-a="chatAction" data-i="${i - 1}" data-j="${j}">${esc(a.label)}</button>`).join('')}</div>` : ''}</div>`).join('')}
         ${UI.typing ? `<div class="msg bot"><div class="typing"><i></i><i></i><i></i></div></div>` : ''}</div>`,
     };
+  };
+  /** Suggestion chips; the money example uses this cell's currency and a demo contact when there is one. */
+  const sug = (k) => {
+    if (k !== 'sug2') return t(k);
+    const p = PK(); const friend = p.demo && p.demo.friend; const amt = (p.chips.send[2] || 200);
+    return friend ? t('sug2', { amt, friend }) : t('sug2b');
   };
   async function userSay(text) {
     text = String(text || '').trim();
@@ -497,7 +525,7 @@
   // ------------------------------------------------------------------ render
   const scr = document.getElementById('screen');
   function render(resetScroll) {
-    document.documentElement.lang = S.lang === 'tn' ? 'tn' : 'en';
+    document.documentElement.lang = S.lang;
     const r = cur();
     const view = V[r.v] || V.home;
     const out = view(r.p || (r.p = {}));
@@ -514,13 +542,13 @@
       const unread = S.me ? S.me.unread : 0;
       const root = S.stack[0] ? S.stack[0].v : 'home';
       html += (S.cfg && S.cfg.demoMode ? `<div class="banner demo">${esc(t('demo'))}</div>` : '') + (S.offline ? `<div class="banner offline">${esc(t('offline'))}</div>` : '');
-      html += `<div class="ab">${S.stack.length > 1 ? `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button><h2>${esc(out.title || '')}</h2>` : `<span class="logo"><span class="mini-flag"><i></i><i></i><i></i><i></i><i></i></span>${r.v === 'home' ? 'Kgotla' : esc(out.title || 'Kgotla')}</span>`}
+      html += `<div class="ab">${S.stack.length > 1 ? `<button class="iconbtn" data-a="back" aria-label="${t('back')}">${ic('back', 22)}</button><h2>${esc(out.title || '')}</h2>` : `<span class="logo"><span class="mini-flag" title="${esc(PK().name)}">${flag()}</span>${r.v === 'home' ? 'Kgotla' : esc(out.title || 'Kgotla')}</span>`}
         ${r.v === 'home' ? `<button class="iconbtn" data-a="go" data-v="services" aria-label="${t('services')}">${ic('plus', 22)}</button>` : ''}
         <button class="iconbtn" data-a="go" data-v="notifs" aria-label="${t('notifs')}">${ic('bell', 22)}${unread ? `<span class="badge">${unread}</span>` : ''}</button>
         <button class="iconbtn" data-a="go" data-v="settings" aria-label="${t('settings')}">${ic('gear', 22)}</button></div>
         <div class="view">${out.body}</div>`;
       if (out.chat) {
-        html += `<div class="suggest">${['sug1', 'sug2', 'sug3', 'sug4', 'sug5', 'sug6'].map((k) => `<button data-a="assistSay" data-k="${k}">${esc(t(k))}</button>`).join('')}</div>
+        html += `<div class="suggest">${['sug1', 'sug2', 'sug3', 'sug4', 'sug5', 'sug6'].map((k) => `<button data-a="assistSay" data-k="${k}">${esc(sug(k))}</button>`).join('')}</div>
           <form class="composer" id="composer">${SR ? `<button type="button" class="iconbtn mic ${UI.listening ? 'on' : ''}" data-a="listen" aria-label="${t('listening')}">${ic('mic', 20)}</button>` : ''}<input id="chatIn" autocomplete="off" placeholder="${UI.listening ? t('listening') : t('talkPrompt')}" aria-label="${t('talkPrompt')}"><button class="iconbtn" type="submit" aria-label="${t('send')}" ${UI.typing ? 'disabled' : ''}>${ic('send', 18)}</button></form>`;
       }
       if (signedIn) html += `<nav class="tabs">${TABS.map((k) => `<button data-a="tab" data-v="${k}" class="${k === 'assist' ? 'mic-tab' : ''}" ${root === k ? 'aria-current="page"' : ''}>${ic(k === 'pay' ? 'wallet' : k === 'assist' ? 'mic' : k, 22)}${t(k)}</button>`).join('')}</nav>`;
@@ -583,7 +611,7 @@
       render();
       if (p.pin.length === 4) {
         try {
-          const r = await api('POST', '/v1/auth/login', { omang: p.omang || '', pin: p.pin, deviceLabel: navigator.userAgent.slice(0, 60) });
+          const r = await api('POST', '/v1/auth/login', { nationalId: p.omang || '', pin: p.pin, deviceLabel: navigator.userAgent.slice(0, 60) });
           S.token = r.token; store.set('kg.token', r.token);
           S.stack = [{ v: 'home', p: {} }];
           await refresh();
@@ -594,7 +622,7 @@
     // enrolment
     enrolStart: async () => {
       const p = cur().p; keepForm(p); UI.busy = true; render();
-      try { const r = await api('POST', '/v1/enrol/start', { omang: p.omang }); Object.assign(p, r, { step: 'otp', error: '' }); }
+      try { const r = await api('POST', '/v1/enrol/start', { nationalId: p.omang }); Object.assign(p, r, { step: 'otp', error: '' }); }
       catch (e) { p.error = e.message; }
       UI.busy = false; render(true);
     },
@@ -672,7 +700,7 @@
     pinCancel: () => { UI.sheet = null; render(); },
 
     // assistant
-    assistSay: (d) => { if (S.stack[0].v !== 'assist' || S.stack.length > 1) tab('assist'); userSay(t(d.k)); },
+    assistSay: (d) => { if (S.stack[0].v !== 'assist' || S.stack.length > 1) tab('assist'); userSay(sug(d.k)); },
     listen,
     chatAction: async (d) => {
       const m = S.chat[Number(d.i)]; const a = m && m.actions && m.actions[Number(d.j)]; if (!a) return;
@@ -723,7 +751,9 @@
 
   // ------------------------------------------------------------------ boot
   (async function boot() {
-    try { S.cfg = await api('GET', '/v1/config'); } catch (e) { S.cfg = { demoMode: false, assistant: 'rules' }; }
+    try { S.cfg = await api('GET', '/v1/config'); store.set('kg.cfg', JSON.stringify(S.cfg)); } catch (e) { S.cfg = S.cfg || { demoMode: false, assistant: 'rules' }; }
+    if (!PK().languages.some((l) => l.code === S.lang)) { S.lang = PK().languages[0].code; store.set('kg.lang', S.lang); }
+    document.title = `Kgotla · ${PK().name}`;
     S.stack = [{ v: S.token ? 'home' : 'welcome', p: {} }];
     render(true);
     if (S.token) refresh().catch(() => {});
