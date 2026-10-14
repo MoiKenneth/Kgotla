@@ -149,3 +149,4 @@ The national registry, liveness vendor, SMS gateway, mobile-money collection and
 - [Connections](docs/CONNECTIONS.md): how existing portals (BURS e-Tax, FNB, Life Gaborone…) move from linked to connected
 - [Tourism](docs/TOURISM.md): parks, lodges, reserves, safaris and drivers
 - [Going live](docs/GO-LIVE.md): real sign-ups, PayPal, DPO Pay, SMS, and what is still to do
+- [Free hosting](docs/FREE-HOSTING.md): Render + Neon, or your own machine + Cloudflare Tunnel

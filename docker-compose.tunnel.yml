@@ -1,0 +1,62 @@
+# Self-hosting on any always-on computer (an office PC, a small server) for free,
+# reachable on the internet through a Cloudflare Tunnel: no open ports, free HTTPS.
+#
+#   1. In the Cloudflare dashboard: Zero Trust > Networks > Tunnels > Create tunnel,
+#      add a public hostname (for example app.yourdomain.co.bw) pointing to http://app:8080,
+#      and copy the tunnel token.
+#   2. Create a .env file next to this one:
+#        TUNNEL_TOKEN=...            (from step 1)
+#        PUBLIC_BASE_URL=https://app.yourdomain.co.bw
+#        KGOTLA_SECRET=...           (openssl rand -base64 48)
+#        POSTGRES_PASSWORD=...       (any long random string)
+#   3. docker compose -f docker-compose.tunnel.yml up -d --build
+#
+# See docs/FREE-HOSTING.md.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: kgotla
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KGOTLA_COUNTRY: ${KGOTLA_COUNTRY:-BW}
+      KGOTLA_CLOUD: "true"
+      DEMO_MODE: ${DEMO_MODE:-true}
+      NODE_ENV: ${NODE_ENV:-staging}
+      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@db:5432/kgotla
+      KGOTLA_SECRET: ${KGOTLA_SECRET:?set KGOTLA_SECRET in .env}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:?set PUBLIC_BASE_URL in .env}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      PAYPAL_ENV: ${PAYPAL_ENV:-sandbox}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM: ${TWILIO_FROM:-}
+      ADMIN_BOOTSTRAP_PASSWORD: ${ADMIN_BOOTSTRAP_PASSWORD:-}
+
+  tunnel:
+    image: cloudflare/cloudflared:2024.12.2
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+    depends_on:
+      - app
+
+volumes:
+  pgdata:

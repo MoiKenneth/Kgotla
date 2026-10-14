@@ -1,0 +1,44 @@
+# Render Blueprint: free hosting for one Kgotla cell (Botswana by default).
+# Database: a free Neon Postgres (set DATABASE_URL to Neon's connection string).
+# See docs/FREE-HOSTING.md.
+services:
+  - type: web
+    name: kgotla-bw
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: KGOTLA_COUNTRY
+        value: BW
+      - key: KGOTLA_CLOUD
+        value: "true"
+      # demo: example people and money. For real sign-ups and payments see docs/GO-LIVE.md
+      - key: DEMO_MODE
+        value: "true"
+      - key: NODE_ENV
+        value: staging
+      - key: DATABASE_URL
+        sync: false
+      - key: KGOTLA_SECRET
+        generateValue: true
+      - key: DEMO_OFFICER_PASSWORD
+        generateValue: true
+      - key: ADMIN_BOOTSTRAP_PASSWORD
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: PAYPAL_ENV
+        value: sandbox
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_FROM
+        sync: false

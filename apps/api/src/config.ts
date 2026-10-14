@@ -31,7 +31,8 @@ export const config = {
   actionTtlMinutes: Number(env.ACTION_TTL_MINUTES ?? 10),
   pinMaxFailures: Number(env.PIN_MAX_FAILURES ?? 5),
   pinLockMinutes: Number(env.PIN_LOCK_MINUTES ?? 15),
-  publicBaseUrl: env.PUBLIC_BASE_URL ?? 'http://localhost:8080',
+  /** Public address. Render sets RENDER_EXTERNAL_URL automatically. */
+  publicBaseUrl: (env.PUBLIC_BASE_URL || env.RENDER_EXTERNAL_URL || 'http://localhost:8080').replace(/\/$/, ''),
   anthropicApiKey: optional(env.ANTHROPIC_API_KEY),
   anthropicModel: env.ANTHROPIC_MODEL ?? 'claude-haiku-5-5',
   outboxIntervalMs: Number(env.OUTBOX_INTERVAL_MS ?? 2000),
